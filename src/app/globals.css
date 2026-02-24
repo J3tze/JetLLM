@@ -115,6 +115,15 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-primary: hsl(var(--accent-color));
+  --ring: hsl(var(--accent-color));
+  --primary: hsl(var(--accent-color));
+  --primary-foreground: oklch(0.985 0 0);
+  --chart-1: hsl(var(--accent-color));
+}
+
+:root {
+  --accent-color: 220 90% 56%;
 }
 
 @layer base {
@@ -123,5 +132,21 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  /* Use dvh for full-height layouts on mobile (accounts for address bar) */
+  html, body {
+    height: 100dvh;
+  }
+}
+
+/* Safe area insets for notched devices (iPhone etc.) */
+@supports (padding: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

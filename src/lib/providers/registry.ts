@@ -19,9 +19,10 @@ export const PROVIDER_REGISTRY: ProviderDef[] = [
     name: "Anthropic",
     sdkPackage: "@ai-sdk/anthropic",
     defaultModels: [
+      "claude-sonnet-4-6-20250514",
+      "claude-opus-4-6-20250514",
       "claude-sonnet-4-20250514",
-      "claude-haiku-4-20250414",
-      "claude-3-5-sonnet-20241022",
+      "claude-haiku-4-5-20251001",
     ],
     supportsCustomBase: true,
   },

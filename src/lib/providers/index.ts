@@ -3,7 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createMistral } from "@ai-sdk/mistral"
 import { getSetting, ProviderConfig } from "@/lib/settings"
-import { LanguageModelV1 } from "ai"
+import { LanguageModel } from "ai"
 
 export { PROVIDER_REGISTRY } from "./registry"
 
@@ -13,7 +13,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   together: "https://api.together.xyz/v1",
 }
 
-export function getModel(providerId: string, modelId: string): LanguageModelV1 {
+export function getModel(providerId: string, modelId: string): LanguageModel {
   const config = getSetting<ProviderConfig>(`provider:${providerId}`)
   if (!config?.apiKey) {
     throw new Error(`No API key configured for provider: ${providerId}`)
@@ -58,7 +58,7 @@ export function getModel(providerId: string, modelId: string): LanguageModelV1 {
         apiKey: config.apiKey,
         baseURL,
       })
-      return provider(modelId)
+      return provider.chat(modelId)
     }
     default:
       throw new Error(`Unknown provider: ${providerId}`)
