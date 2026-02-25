@@ -15,18 +15,27 @@ export function ChatMessage({ role, children }: ChatMessageProps) {
   return (
     <div className={cn("flex gap-3 px-4 py-3", isUser && "flex-row-reverse")}>
       <Avatar className="h-8 w-8 shrink-0 mt-0.5">
-        <AvatarFallback className={cn(
-          isUser ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
-        )}>
+        <AvatarFallback
+          className="bg-secondary text-secondary-foreground"
+          style={isUser
+            ? { backgroundColor: "var(--chat-user-bubble)", color: "var(--chat-user-bubble-fg)" }
+            : undefined
+          }
+        >
           {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
         </AvatarFallback>
       </Avatar>
-      <div className={cn(
-        "rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed whitespace-pre-wrap",
-        isUser
-          ? "bg-primary text-primary-foreground"
-          : "bg-card text-card-foreground border border-border/50"
-      )}>
+      <div
+        className="rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed whitespace-pre-wrap backdrop-blur-sm"
+        style={isUser
+          ? { backgroundColor: "var(--chat-user-bubble)", color: "var(--chat-user-bubble-fg)" }
+          : {
+              backgroundColor: "color-mix(in srgb, var(--chat-assistant-bubble) 85%, transparent)",
+              color: "var(--chat-assistant-bubble-fg)",
+              border: "1px solid var(--chat-assistant-border)",
+            }
+        }
+      >
         {children}
       </div>
     </div>

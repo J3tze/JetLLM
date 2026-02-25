@@ -18,8 +18,20 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
   { name: "Cyan", hsl: "188 94% 43%", hex: "#06b6d4" },
 ] as const
 
+// All CSS variables that should reflect the accent color
 function applyAccent(hsl: string) {
-  document.documentElement.style.setProperty("--accent-color", hsl)
+  const el = document.documentElement
+  const color = `hsl(${hsl})`
+  el.style.setProperty("--accent-color", hsl)
+  // Set all accent-derived variables directly (bypasses CSS cascade issues with Tailwind v4)
+  el.style.setProperty("--primary", color)
+  el.style.setProperty("--ring", color)
+  el.style.setProperty("--sidebar-primary", color)
+  el.style.setProperty("--sidebar-accent", `hsl(${hsl} / 0.12)`)
+  el.style.setProperty("--sidebar-ring", color)
+  el.style.setProperty("--chart-1", color)
+  // Remove user bubble override so CSS default follows accent
+  el.style.removeProperty("--chat-user-bubble")
 }
 
 export function useAccentColor() {

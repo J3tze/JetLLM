@@ -29,6 +29,17 @@ export const messages = sqliteTable("messages", {
     .default(sql`(unixepoch())`),
 })
 
+export const memories = sqliteTable("memories", {
+  id: text("id").primaryKey(),
+  type: text("type", { enum: ["fact", "preference", "summary"] }).notNull(),
+  content: text("content").notNull(),
+  sourceConversationId: text("source_conversation_id")
+    .references(() => conversations.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

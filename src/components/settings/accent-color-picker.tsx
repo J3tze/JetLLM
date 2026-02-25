@@ -1,12 +1,16 @@
 "use client"
 
-import { useAccentColor } from "@/hooks/use-accent-color"
+import type { AccentPreset } from "@/hooks/use-accent-color"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-export function AccentColorPicker() {
-  const { accent, setAccent, presets } = useAccentColor()
+type AccentColorPickerProps = {
+  accent: AccentPreset
+  setAccent: (preset: AccentPreset) => void
+  presets: readonly AccentPreset[]
+}
 
+export function AccentColorPicker({ accent, setAccent, presets }: AccentColorPickerProps) {
   return (
     <Card>
       <CardHeader className="pb-3">

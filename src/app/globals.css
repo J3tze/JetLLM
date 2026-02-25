@@ -116,6 +116,8 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.556 0 0);
   --sidebar-primary: hsl(var(--accent-color));
+  --sidebar-accent: hsl(var(--accent-color) / 0.12);
+  --sidebar-ring: hsl(var(--accent-color));
   --ring: hsl(var(--accent-color));
   --primary: hsl(var(--accent-color));
   --primary-foreground: oklch(0.985 0 0);
@@ -124,6 +126,13 @@
 
 :root {
   --accent-color: 220 90% 56%;
+  --chat-bg: #000000;
+  --chat-user-bubble: hsl(var(--accent-color));
+  --chat-user-bubble-fg: #fafafa;
+  --chat-assistant-bubble: #131313;
+  --chat-assistant-bubble-fg: #fafafa;
+  --chat-assistant-border: rgba(255, 255, 255, 0.08);
+  --chat-bg-image: none;
 }
 
 @layer base {
@@ -139,6 +148,16 @@
   html, body {
     height: 100dvh;
   }
+}
+
+/* Accent-tinted active tab underline */
+.dark [data-slot="tabs-trigger"][data-state="active"]::after {
+  background-color: hsl(var(--accent-color));
+}
+
+/* Accent-tinted scrollbar thumb */
+.dark [data-slot="scroll-area-thumb"] {
+  background-color: hsl(var(--accent-color) / 0.3);
 }
 
 /* Safe area insets for notched devices (iPhone etc.) */

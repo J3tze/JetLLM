@@ -1,6 +1,9 @@
 import { streamText, UIMessage, convertToModelMessages } from "ai"
 import { getModel } from "@/lib/providers"
 import { addMessage, getConversation } from "@/lib/conversations"
+import { getFormattedMemories } from "@/lib/memory"
+import { getSetting } from "@/lib/settings"
+import { extractMemories } from "@/lib/memory/extract"
 
 export const maxDuration = 60
 
@@ -58,6 +61,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // Inject memories into system prompt
+    const memoryEnabled = getSetting<boolean>("memory:enabled")
+    if (memoryEnabled !== false) {
+      const memoryContext = getFormattedMemories()
+      if (memoryContext) {
+        systemPrompt = systemPrompt + "\n\n" + memoryContext
+      }
+    }
+
     const llmModel = getModel(provider, modelId)
     // Only treat as thinking model when using direct Anthropic provider
     const thinking = provider === "anthropic" && isThinkingModel(modelId)
@@ -88,6 +100,10 @@ export async function POST(req: Request) {
             conversationId,
             role: "assistant",
             content: text,
+          })
+          // Fire-and-forget memory extraction
+          extractMemories(conversationId).catch((err) => {
+            console.error("[memory] Background extraction error:", err)
           })
         }
       },
