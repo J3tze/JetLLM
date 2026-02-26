@@ -21,6 +21,9 @@ npm run dev
 npm run build
 npm run lint
 npm test
+npm run test:watch
+docker compose build
+docker compose up
 ```
 
 ## Key Paths
@@ -30,8 +33,10 @@ npm test
 - Chat UI: `src/components/chat/*`
 - Settings UI: `src/app/settings/page.tsx`, `src/components/settings/*`
 - API routes: `src/app/api/*`
+- OpenRouter model proxy: `src/app/api/providers/openrouter/models/route.ts`
 - Providers: `src/lib/providers/*`
-- Memory logic: `src/lib/memory/*`
+- Memory logic: `src/lib/memory.ts`, `src/app/api/memory/route.ts`
+- Chat theme state: `src/hooks/use-chat-theme.ts`, `src/components/theme-initializer.tsx`
 - DB schema: `src/lib/db/schema.ts`
 
 ## Theme/Styling Notes
