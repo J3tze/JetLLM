@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "./chat-message"
 import { ChevronDown } from "lucide-react"
@@ -112,7 +114,14 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-cover bg-center bg-no-repeat" style={{ backgroundColor: "var(--chat-bg)", backgroundImage: "var(--chat-bg-image)" }}>
+      <div
+        className="flex-1 flex items-center justify-center bg-cover bg-no-repeat"
+        style={{
+          backgroundColor: "var(--chat-bg)",
+          backgroundImage: "var(--chat-bg-image)",
+          backgroundPosition: "center bottom",
+        }}
+      >
         <div className="text-center space-y-3">
           <JetLLMLogo className="mx-auto w-48 h-auto" />
           <p className="text-sm text-muted-foreground">{greeting}</p>
@@ -127,7 +136,15 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
   return (
     <div className="relative flex-1 flex flex-col">
-      <ScrollArea className="flex-1 bg-cover bg-center bg-no-repeat" ref={scrollAreaRef} style={{ backgroundColor: "var(--chat-bg)", backgroundImage: "var(--chat-bg-image)" }}>
+      <ScrollArea
+        className="flex-1 bg-cover bg-no-repeat"
+        ref={scrollAreaRef}
+        style={{
+          backgroundColor: "var(--chat-bg)",
+          backgroundImage: "var(--chat-bg-image)",
+          backgroundPosition: "center bottom",
+        }}
+      >
         <div className="max-w-3xl mx-auto py-4">
           {messages
             .filter(m => m.role === "user" || m.role === "assistant")
@@ -138,7 +155,11 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                     return <ReasoningBlock key={i} text={part.text} />
                   }
                   if (part.type === "text") {
-                    return <span key={i}>{part.text}</span>
+                    return (
+                      <div key={i} className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:bg-black/30 prose-pre:rounded-lg prose-code:text-[0.85em] prose-code:before:content-none prose-code:after:content-none prose-headings:my-2 prose-a:text-current prose-a:underline">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                      </div>
+                    )
                   }
                   return null
                 })}
@@ -155,7 +176,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         <Button
           size="icon"
           variant="secondary"
-          className="absolute bottom-4 right-4 rounded-full shadow-lg z-10 h-8 w-8 bg-secondary/80 backdrop-blur-sm"
+          className="absolute bottom-4 right-4 z-10 h-8 w-8 rounded-full border border-[color:var(--glass-border-strong)] bg-[color:var(--glass-surface-strong)] shadow-lg backdrop-blur-md"
           onClick={scrollToBottom}
         >
           <ChevronDown className="h-4 w-4" />

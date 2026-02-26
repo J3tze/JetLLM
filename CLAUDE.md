@@ -36,7 +36,7 @@ npx shadcn@latest add <component>  # Add a new shadcn/ui component
 **Path alias:** `@` maps to `src/` (configured in both `tsconfig.json` and `vitest.config.mts`).
 
 ### API Routes (`src/app/api/`)
-- `chat/` — POST streaming chat via Vercel AI SDK `streamText` → `toUIMessageStreamResponse()`. Injects memories into system prompt, triggers background memory extraction in `onFinish`.
+- `chat/` — POST streaming chat via Vercel AI SDK `streamText` → `toUIMessageStreamResponse()`. Injects memories into system prompt, triggers background memory extraction in `onFinish`. `maxDuration = 60` seconds.
 - `conversations/` — CRUD for conversations; `[id]/messages` for message history
 - `memory/` — CRUD for memories; `[id]` for individual memory GET/PATCH/DELETE
 - `providers/models/` — GET models list from OpenRouter (cached 1 hour)
@@ -52,8 +52,8 @@ Services use a **factory pattern** for testability: `createSettingsService(db)`,
 ### Memory System (`src/lib/memory/`, `src/lib/memory.ts`)
 - `memory.ts` — Memory service (CRUD, `existsByContent` dedup, `getFormattedForInjection` for system prompt injection)
 - `memory/prompts.ts` — Extraction prompt template with `buildExtractionPrompt(existingMemories, recentMessages)`
-- `memory/extract.ts` — `extractMemories(conversationId)`: fire-and-forget background job using `generateText()` with a configurable cheap/fast model. Parses JSON response, deduplicates, stores new memories.
-- Memory types: `fact`, `preference`, `summary`
+- `memory/extract.ts` — `extractMemories(conversationId)`: fire-and-forget background job using `generateText()` (temperature 0) with a configurable cheap/fast model. Parses JSON response (handles markdown-wrapped ```json blocks), deduplicates via `existsByContent`, stores new memories. Content capped at 200 chars; only extracts `fact` and `preference` types.
+- Memory types: `fact`, `preference`, `summary` (schema supports all three; extraction only produces `fact`/`preference`)
 - Settings: `memory:enabled` (boolean), `memory:model` ({ provider, model })
 - Injection: All memories formatted as bullet list, appended to system prompt (truncated at 2000 chars)
 
@@ -91,10 +91,13 @@ Tabbed layout with three tabs:
 ### Theme & Accent Colors
 - AMOLED dark: pure `#000000` background, surfaces at `oklch(0.075 0 0)`
 - Dark mode forced by default via next-themes (`enableSystem={false}`)
+- **Base theme colors use OKLch color space** in `globals.css` (e.g. `oklch(0.577 0.245 27.325)`). Accent-derived colors use HSL.
 - Dynamic accent via `--accent-color` CSS variable (HSL format, e.g. `"220 90% 56%"`). Applied to all UI elements via JS (`applyAccent()` sets `--primary`, `--ring`, `--sidebar-*`, `--chart-1` directly on documentElement to bypass Tailwind v4 cascade issues).
 - Chat theme colors (`--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc.) customizable via presets or individual hex pickers. User bubble defaults to accent color via `"accent"` sentinel.
 - Mild transparency effects: header/input bars use `bg-background/80 backdrop-blur-md`, assistant bubbles use `color-mix()` for translucency.
 - Background image support via `--chat-bg-image` CSS variable (data URL stored in settings).
+- Custom dark variant: `@custom-variant dark (&:is(.dark *))` in globals.css.
+- Safe area support: `.safe-area-top`/`.safe-area-bottom` classes for notched devices; root uses `height: 100dvh`.
 
 ## Key Conventions
 
@@ -122,11 +125,15 @@ function createTestDb() {
 }
 ```
 
-Provider, chat route, and memory extraction tests use `vi.mock` for external dependencies.
+Provider, chat route, and memory extraction tests use `vi.mock` for external dependencies. Close the SQLite instance in `afterEach` to prevent resource leaks.
 
 ## Supported Providers
 
 OpenAI, Anthropic, Google Gemini, Mistral, Groq, OpenRouter, Together AI, Custom OpenAI-compatible.
+
+## PWA
+
+Service worker at `/public/sw.js` uses network-first caching strategy (skips API calls). Precaches `/` and `/settings` on install. Manifest at `/public/manifest.json` with SVG icons. Registered via inline script in root layout.
 
 ## Planning Docs
 

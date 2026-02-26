@@ -26,11 +26,11 @@ export function ParameterPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8 glass-control border border-[color:var(--glass-border-strong)] hover:bg-[color:var(--glass-surface)]">
           <Settings2 className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
+      <PopoverContent className="w-72 glass-panel border-[color:var(--glass-border-strong)]" align="end">
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between">

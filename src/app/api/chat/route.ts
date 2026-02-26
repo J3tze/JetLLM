@@ -52,13 +52,20 @@ export async function POST(req: Request) {
       })
     }
 
-    // Get conversation-level system prompt if available
-    let systemPrompt = "You are a helpful AI assistant."
+    // Build system prompt: custom setting > conversation-level > default
+    const customSystemPrompt = getSetting<string>("chat:systemPrompt")
+    let systemPrompt = customSystemPrompt || "You are a helpful AI assistant."
     if (conversationId) {
       const conversation = getConversation(conversationId)
       if (conversation?.systemPrompt) {
         systemPrompt = conversation.systemPrompt
       }
+    }
+
+    // Inject user name if configured
+    const userName = getSetting<string>("chat:userName")
+    if (userName) {
+      systemPrompt = systemPrompt + `\n\nThe user's name is ${userName}.`
     }
 
     // Inject memories into system prompt

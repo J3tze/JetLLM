@@ -9,6 +9,7 @@ import { ChatThemePicker } from "@/components/settings/chat-theme-picker"
 import { ProviderSettings } from "@/components/settings/provider-settings"
 import { MemorySettings } from "@/components/settings/memory-settings"
 import { MemoryList } from "@/components/settings/memory-list"
+import { ChatSettings } from "@/components/settings/chat-settings"
 import { Palette, Key, Brain } from "lucide-react"
 
 export default function SettingsPage() {
@@ -40,6 +41,7 @@ export default function SettingsPage() {
       </TabsList>
 
       <TabsContent value="general" className="space-y-6">
+        <ChatSettings />
         <AccentColorPicker accent={accentState.accent} setAccent={handleAccentChange} presets={accentState.presets} />
         <ChatThemePicker accentHex={accentState.accent.hex} chatThemeState={chatThemeState} />
       </TabsContent>

@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -107,7 +109,7 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0 0 0);
+  --sidebar: oklch(0 0 0 / 35%);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -133,6 +135,12 @@
   --chat-assistant-bubble-fg: #fafafa;
   --chat-assistant-border: rgba(255, 255, 255, 0.08);
   --chat-bg-image: none;
+  --glass-surface: rgba(5, 8, 12, 0.66);
+  --glass-surface-strong: rgba(5, 8, 12, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-strong: rgba(255, 255, 255, 0.16);
+  --glass-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  --glass-blur: 16px;
 }
 
 @layer base {
@@ -147,6 +155,25 @@
   /* Use dvh for full-height layouts on mobile (accounts for address bar) */
   html, body {
     height: 100dvh;
+  }
+}
+
+/* Frosted glass panels over wallpaper — uses @layer to prevent Tailwind stripping backdrop-filter */
+@layer base {
+  .glass-panel {
+    background-color: var(--glass-surface) !important;
+    border-color: var(--glass-border) !important;
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(85%) brightness(0.82);
+    backdrop-filter: blur(var(--glass-blur)) saturate(85%) brightness(0.82);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--glass-shadow);
+  }
+
+  .glass-control {
+    background-color: var(--glass-surface-strong);
+    border-color: var(--glass-border) !important;
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(85%) brightness(0.78);
+    backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(85%) brightness(0.78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 }
 
