@@ -75,7 +75,7 @@ export function ModelSelector({
   return (
     <div className="flex gap-2 flex-1 sm:flex-initial min-w-0">
       <Select value={provider} onValueChange={onProviderChange}>
-        <SelectTrigger className="w-[120px] sm:w-[140px] h-8 shrink-0 text-xs glass-control border-[color:var(--glass-border-strong)]">
+        <SelectTrigger className="w-[120px] sm:w-[140px] h-8 shrink-0 text-xs border-border/50 bg-transparent">
           <SelectValue placeholder="Provider" />
         </SelectTrigger>
         <SelectContent>
@@ -88,7 +88,7 @@ export function ModelSelector({
       </Select>
 
       {loading ? (
-        <div className="min-w-0 flex-1 sm:w-[200px] h-8 flex items-center px-3 text-xs text-muted-foreground rounded-md border glass-control border-[color:var(--glass-border-strong)]">
+        <div className="min-w-0 flex-1 sm:w-[200px] h-8 flex items-center px-3 text-xs text-muted-foreground rounded-md border border-border/50 bg-transparent">
           Loading models...
         </div>
       ) : showSearchable ? (
@@ -98,7 +98,7 @@ export function ModelSelector({
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className="min-w-0 flex-1 sm:w-[200px] h-8 justify-between text-xs font-normal !bg-[color:var(--glass-surface-strong)] border-[color:var(--glass-border-strong)] backdrop-blur-md"
+              className="min-w-0 flex-1 sm:w-[200px] h-8 justify-between text-xs font-normal bg-transparent border-border/50"
             >
               <span className="truncate">
                 {model || "Select model..."}
@@ -106,7 +106,7 @@ export function ModelSelector({
               <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0 glass-panel border-[color:var(--glass-border-strong)]" align="start">
+          <PopoverContent className="w-[300px] p-0 border-border/50" align="start">
             <Command>
               <CommandInput placeholder="Search models..." className="text-xs" />
               <CommandList>
@@ -131,7 +131,7 @@ export function ModelSelector({
         </Popover>
       ) : models.length > 0 ? (
         <Select value={model} onValueChange={onModelChange}>
-          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] h-8 text-xs glass-control border-[color:var(--glass-border-strong)]">
+          <SelectTrigger className="min-w-0 flex-1 sm:w-[200px] h-8 text-xs border-border/50 bg-transparent">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
@@ -147,7 +147,7 @@ export function ModelSelector({
           value={model}
           onChange={e => onModelChange(e.target.value)}
           placeholder="Enter model ID..."
-          className="min-w-0 flex-1 sm:w-[200px] h-8 text-xs glass-control border-[color:var(--glass-border-strong)]"
+          className="min-w-0 flex-1 sm:w-[200px] h-8 text-xs border-border/50 bg-transparent"
         />
       )}
     </div>

@@ -11,6 +11,31 @@ const CHAT_THEME_VARS: Record<string, string> = {
   assistantBorder: "--chat-assistant-border",
 }
 
+const WALLPAPER_ID = "jetllm-wallpaper"
+
+function applyWallpaper(bgColor: string, bgImage?: string) {
+  let el = document.getElementById(WALLPAPER_ID)
+  if (!el) {
+    el = document.createElement("div")
+    el.id = WALLPAPER_ID
+    Object.assign(el.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "-1",
+      backgroundSize: "cover",
+      backgroundPosition: "center bottom",
+      backgroundRepeat: "no-repeat",
+    })
+    document.body.prepend(el)
+  }
+  el.style.backgroundColor = bgColor
+  if (bgImage) {
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${bgImage})`
+  } else {
+    el.style.backgroundImage = "none"
+  }
+}
+
 export function ThemeInitializer() {
   useEffect(() => {
     fetch("/api/settings")
@@ -37,7 +62,6 @@ export function ThemeInitializer() {
           for (const [key, value] of Object.entries(chatTheme.colors)) {
             const cssVar = CHAT_THEME_VARS[key]
             if (!cssVar) continue
-            // "accent" sentinel: don't set inline style, let CSS default handle it
             if (key === "userBubble" && value === "accent") {
               el.style.removeProperty(cssVar)
             } else {
@@ -45,9 +69,10 @@ export function ThemeInitializer() {
             }
           }
         }
-        if (chatTheme?.bgImage) {
-          document.documentElement.style.setProperty("--chat-bg-image", `url(${chatTheme.bgImage})`)
-        }
+
+        // Apply wallpaper
+        const bgColor = chatTheme?.colors?.chatBg || "#000000"
+        applyWallpaper(bgColor, chatTheme?.bgImage)
       })
       .catch(() => {})
   }, [])

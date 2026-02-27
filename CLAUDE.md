@@ -62,12 +62,13 @@ Services use a **factory pattern** for testability: `createSettingsService(db)`,
 - `index.ts` — `getDb()` singleton with WAL mode and foreign keys enabled
 
 ### Frontend (`src/components/`, `src/hooks/`)
-- `chat/chat-panel.tsx` — Main chat container. Manages provider/model state, `useChat` hook, auto-creates conversations on first message, persists user messages to DB before sending.
+- `chat/chat-panel.tsx` — Main chat container. Manages provider/model state, `useChat` hook, auto-creates conversations on first message, persists user messages to DB before sending. Top bar has only sidebar trigger + provider/model selectors (no parameter controls).
 - `chat/chat-sidebar.tsx` — Conversation list with create/delete/switch.
 - `chat/model-selector.tsx` — Provider + model dropdowns. Switches to searchable combobox for providers with many models (OpenRouter). Falls back to text input when no default models.
 - `chat/message-list.tsx` — Auto-scrolling message list with streaming support. Tracks viewport scroll position, pauses auto-scroll when user scrolls up, shows scroll-to-bottom button.
+- `chat/chat-message.tsx` — Minimal flat message layout (no avatars, no bubbles). User messages get a subtle `bg-white/[0.03]` tint.
 - `components/jetllm-logo.tsx` — SVG logo with accent-colored origami plane and "LLM" text.
-- `components/theme-initializer.tsx` — Invisible component in root layout that loads accent color + chat theme from settings on mount and applies all CSS variables via JS (bypasses Tailwind v4 cascade issues).
+- `components/theme-initializer.tsx` — Loads accent color + chat theme from settings on mount. Applies CSS variables via JS on `documentElement`. Also creates a fixed-position wallpaper div (`#jetllm-wallpaper`) in the DOM with the background image + 40% dark scrim overlay.
 - `hooks/use-accent-color.ts` — Manages accent color (7 presets). `applyAccent()` sets `--accent-color`, `--primary`, `--ring`, `--sidebar-primary`, `--sidebar-accent`, `--sidebar-ring`, `--chart-1` directly on `document.documentElement`.
 - `hooks/use-chat-theme.ts` — Chat theme presets (AMOLED Black, Dark Gray, Midnight Blue) + individual color pickers. Manages `--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc. Supports background image upload (data URL stored in settings).
 - `hooks/use-conversations.ts` — Fetches, creates, deletes conversations.
@@ -94,8 +95,9 @@ Tabbed layout with three tabs:
 - **Base theme colors use OKLch color space** in `globals.css` (e.g. `oklch(0.577 0.245 27.325)`). Accent-derived colors use HSL.
 - Dynamic accent via `--accent-color` CSS variable (HSL format, e.g. `"220 90% 56%"`). Applied to all UI elements via JS (`applyAccent()` sets `--primary`, `--ring`, `--sidebar-*`, `--chart-1` directly on documentElement to bypass Tailwind v4 cascade issues).
 - Chat theme colors (`--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc.) customizable via presets or individual hex pickers. User bubble defaults to accent color via `"accent"` sentinel.
-- Mild transparency effects: header/input bars use `bg-background/80 backdrop-blur-md`, assistant bubbles use `color-mix()` for translucency.
-- Background image support via `--chat-bg-image` CSS variable (data URL stored in settings).
+- **Minimal UI approach:** No message bubbles/avatars, no borders between header/content/input, transparent backgrounds. The sidebar is solid black to blend with AMOLED edges.
+- **Wallpaper system:** `ThemeInitializer` injects a fixed-position `#jetllm-wallpaper` div with `z-index: -1` behind all content. Background image stored as data URL in settings (`ui:chatTheme.bgImage`), rendered with a 40% dark scrim via `linear-gradient` overlay. All UI layers above are transparent so the wallpaper shows through.
+- `.glass-panel` and `.glass-control` utility classes in `globals.css` still available for components that need frosted glass effects.
 - Custom dark variant: `@custom-variant dark (&:is(.dark *))` in globals.css.
 - Safe area support: `.safe-area-top`/`.safe-area-bottom` classes for notched devices; root uses `height: 100dvh`.
 
@@ -134,6 +136,13 @@ OpenAI, Anthropic, Google Gemini, Mistral, Groq, OpenRouter, Together AI, Custom
 ## PWA
 
 Service worker at `/public/sw.js` uses network-first caching strategy (skips API calls). Precaches `/` and `/settings` on install. Manifest at `/public/manifest.json` with SVG icons. Registered via inline script in root layout.
+
+## Development Expectations
+
+- Keep visual changes consistent across desktop and mobile.
+- For UI work, validate with screenshots (or Playwright) after changes.
+- Prefer targeted lint/test commands for touched files first.
+- Do not revert unrelated local changes.
 
 ## Planning Docs
 

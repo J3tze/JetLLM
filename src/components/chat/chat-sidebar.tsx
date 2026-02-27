@@ -34,7 +34,7 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-border/50 p-4">
+      <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-extrabold tracking-tight">Jet<span style={{ color: "hsl(var(--accent-color))" }}>LLM</span></h1>
           <Button variant="ghost" size="icon" onClick={onNew}>
@@ -72,7 +72,7 @@ export function ChatSidebar({
           </SidebarGroup>
         </ScrollArea>
       </SidebarContent>
-      <SidebarFooter className="border-t border-border/50 p-4">
+      <SidebarFooter className="p-4">
         <Button variant="outline" className="w-full justify-start gap-2" asChild>
           <a href="/settings">
             <Settings className="h-4 w-4" />

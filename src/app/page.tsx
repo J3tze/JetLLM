@@ -34,15 +34,7 @@ export default function Home() {
   if (!mounted) return null
 
   return (
-    <SidebarProvider
-      className="bg-no-repeat"
-      style={{
-        backgroundColor: "var(--chat-bg)",
-        backgroundImage: "var(--chat-bg-image)",
-        backgroundSize: "cover",
-        backgroundPosition: "center bottom",
-      }}
-    >
+    <SidebarProvider>
       <ChatSidebar
         conversations={conversations}
         activeId={activeId}

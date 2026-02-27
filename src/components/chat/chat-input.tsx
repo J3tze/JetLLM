@@ -38,7 +38,7 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
   }
 
   return (
-    <div className="border-t p-4 glass-panel safe-area-bottom">
+    <div className="px-4 pb-4 pt-2 safe-area-bottom">
       <div className="max-w-3xl mx-auto flex gap-2 items-end">
         <Textarea
           ref={textareaRef}
@@ -48,13 +48,13 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
           onInput={handleInput}
           placeholder="Type a message..."
           rows={1}
-          className="min-h-[44px] max-h-[200px] resize-none rounded-xl glass-control border-[color:var(--glass-border-strong)]"
+          className="min-h-[44px] max-h-[200px] resize-none rounded-xl border-border/50 bg-white/[0.03]"
         />
         <Button
           size="icon"
           onClick={handleSend}
           disabled={!value.trim() || isLoading}
-          className="h-11 w-11 shrink-0 rounded-xl shadow-[0_8px_28px_hsl(var(--accent-color)/0.35)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          className="h-11 w-11 shrink-0 rounded-xl"
         >
           <SendHorizontal className="h-4 w-4" />
         </Button>

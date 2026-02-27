@@ -114,14 +114,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div
-        className="flex-1 flex items-center justify-center bg-cover bg-no-repeat"
-        style={{
-          backgroundColor: "var(--chat-bg)",
-          backgroundImage: "var(--chat-bg-image)",
-          backgroundPosition: "center bottom",
-        }}
-      >
+      <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-3">
           <JetLLMLogo className="mx-auto w-48 h-auto" />
           <p className="text-sm text-muted-foreground">{greeting}</p>
@@ -137,15 +130,10 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   return (
     <div className="relative flex-1 flex flex-col">
       <ScrollArea
-        className="flex-1 bg-cover bg-no-repeat"
+        className="flex-1"
         ref={scrollAreaRef}
-        style={{
-          backgroundColor: "var(--chat-bg)",
-          backgroundImage: "var(--chat-bg-image)",
-          backgroundPosition: "center bottom",
-        }}
       >
-        <div className="max-w-3xl mx-auto py-4">
+        <div className="max-w-3xl mx-auto py-6 space-y-1">
           {messages
             .filter(m => m.role === "user" || m.role === "assistant")
             .map((message) => (
@@ -176,7 +164,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         <Button
           size="icon"
           variant="secondary"
-          className="absolute bottom-4 right-4 z-10 h-8 w-8 rounded-full border border-[color:var(--glass-border-strong)] bg-[color:var(--glass-surface-strong)] shadow-lg backdrop-blur-md"
+          className="absolute bottom-4 right-4 z-10 h-8 w-8 rounded-full border-border/50 shadow-lg"
           onClick={scrollToBottom}
         >
           <ChevronDown className="h-4 w-4" />

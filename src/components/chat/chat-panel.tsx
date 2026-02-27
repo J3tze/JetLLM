@@ -7,7 +7,6 @@ import type { UIMessage } from "ai"
 import { MessageList } from "./message-list"
 import { ChatInput } from "./chat-input"
 import { ModelSelector } from "./model-selector"
-import { ParameterPopover } from "./parameter-popover"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
 
@@ -189,24 +188,14 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b px-3 py-2.5 flex flex-wrap items-center gap-2 safe-area-top glass-panel">
-        <SidebarTrigger className="h-9 w-9" />
+      <div className="px-4 py-2 flex items-center gap-2 safe-area-top">
+        <SidebarTrigger className="h-8 w-8" />
         <ModelSelector
           provider={provider}
           model={model}
           onProviderChange={handleProviderChange}
           onModelChange={setModel}
         />
-        <div className="ml-auto">
-          <ParameterPopover
-            temperature={temperature}
-            maxTokens={maxTokens}
-            topP={topP}
-            onTemperatureChange={setTemperature}
-            onMaxTokensChange={setMaxTokens}
-            onTopPChange={setTopP}
-          />
-        </div>
       </div>
       <MessageList messages={messages} isLoading={isLoading} />
       <ChatInput onSend={handleSend} isLoading={isLoading} />
