@@ -31,6 +31,7 @@ export function MemorySettings() {
   const [modelOpen, setModelOpen] = useState(false)
 
   useEffect(() => {
+    // Load memory settings
     fetch("/api/settings")
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
@@ -40,15 +41,22 @@ export function MemorySettings() {
         if (settings["memory:model"]) {
           setModelConfig(settings["memory:model"] as MemoryModelConfig)
         }
+      })
+      .catch(() => {})
+
+    // Load configured providers from the providers/configs endpoint
+    fetch("/api/providers/configs")
+      .then(res => res.ok ? res.json() : {})
+      .then((configs: Record<string, { hasKey: boolean }>) => {
         const configured: string[] = []
         for (const p of PROVIDER_REGISTRY) {
-          const config = settings[`provider:${p.id}`] as { apiKey?: string } | undefined
-          if (config?.apiKey) {
+          if (configs[p.id]?.hasKey) {
             configured.push(p.id)
           }
         }
         setConfiguredProviders(configured)
       })
+      .catch(() => {})
   }, [])
 
   // Fetch models for providers that support it (e.g., OpenRouter)
