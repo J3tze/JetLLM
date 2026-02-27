@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { CHAT_FONTS } from "@/hooks/use-chat-theme"
 
 const CHAT_THEME_VARS: Record<string, string> = {
   chatBg: "--chat-bg",
@@ -9,6 +10,7 @@ const CHAT_THEME_VARS: Record<string, string> = {
   assistantBubble: "--chat-assistant-bubble",
   assistantBubbleFg: "--chat-assistant-bubble-fg",
   assistantBorder: "--chat-assistant-border",
+  textColor: "--chat-text-color",
 }
 
 const WALLPAPER_ID = "jetllm-wallpaper"
@@ -56,7 +58,7 @@ export function ThemeInitializer() {
         }
 
         // Apply chat theme colors
-        const chatTheme = settings["ui:chatTheme"] as { colors?: Record<string, string>; bgImage?: string; glassOpacity?: number } | undefined
+        const chatTheme = settings["ui:chatTheme"] as { colors?: Record<string, string>; bgImage?: string; glassOpacity?: number; font?: string; bubbleStyle?: string } | undefined
         if (chatTheme?.colors) {
           const el = document.documentElement
           for (const [key, value] of Object.entries(chatTheme.colors)) {
@@ -80,6 +82,25 @@ export function ThemeInitializer() {
         }
         if (chatTheme?.glassOpacity !== undefined) {
           document.documentElement.style.setProperty("--glass-opacity", String(chatTheme.glassOpacity))
+        }
+
+        // Apply font
+        if (chatTheme?.font) {
+          const fontDef = CHAT_FONTS.find((f: { name: string }) => f.name === chatTheme.font)
+          if (fontDef && !fontDef.builtin) {
+            const link = document.createElement("link")
+            link.rel = "stylesheet"
+            link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(chatTheme.font)}:wght@300;400;500;600;700&display=swap`
+            document.head.appendChild(link)
+          }
+          if (fontDef) {
+            document.documentElement.style.setProperty("--chat-font", fontDef.family)
+          }
+        }
+
+        // Apply bubble style
+        if (chatTheme?.bubbleStyle) {
+          document.documentElement.dataset.bubbleStyle = chatTheme.bubbleStyle
         }
       })
       .catch(() => {})

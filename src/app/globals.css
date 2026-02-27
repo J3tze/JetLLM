@@ -141,6 +141,8 @@
   --glass-border-strong: rgba(255, 255, 255, 0.16);
   --glass-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
   --glass-blur: 16px;
+  --chat-font: var(--font-geist-sans);
+  --chat-text-color: #fafafa;
 }
 
 @layer base {
