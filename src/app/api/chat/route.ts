@@ -6,6 +6,9 @@ import { getFormattedMemories } from "@/lib/memory"
 import { getSetting } from "@/lib/settings"
 import { extractMemories } from "@/lib/memory/extract"
 import { searchWeb, formatSearchResults } from "@/lib/search/tavily"
+import { getProject } from "@/lib/projects"
+import { searchDocuments, formatRagContext } from "@/lib/rag/search"
+import { autoTitleConversation } from "@/lib/conversations/auto-title"
 
 export const maxDuration = 60
 
@@ -78,6 +81,35 @@ export async function POST(req: Request) {
       const memoryContext = getFormattedMemories()
       if (memoryContext) {
         systemPrompt = systemPrompt + "\n\n" + memoryContext
+      }
+    }
+
+    // Inject project context and RAG document search
+    if (conversationId) {
+      const conv = getConversation(conversationId)
+      if (conv?.projectId) {
+        const project = getProject(conv.projectId)
+        // Inject project system prompt
+        if (project?.systemPrompt) {
+          systemPrompt = systemPrompt + "\n\n" + project.systemPrompt
+        }
+        // RAG: search project documents for relevant context
+        const ragModel = getSetting<{ provider: string; model: string }>("rag:model")
+        if (ragModel?.provider && ragModel?.model) {
+          try {
+            const lastUserMsg = messages.filter(m => m.role === "user").pop()
+            const query = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : ""
+            if (query) {
+              const results = await searchDocuments(conv.projectId, query)
+              const ragContext = formatRagContext(results)
+              if (ragContext) {
+                systemPrompt = systemPrompt + "\n\n" + ragContext
+              }
+            }
+          } catch (err) {
+            console.error("[chat] RAG search error:", err)
+          }
+        }
       }
     }
 
@@ -158,6 +190,15 @@ export async function POST(req: Request) {
           extractMemories(conversationId).catch((err) => {
             console.error("[memory] Background extraction error:", err)
           })
+          // Auto-title on first assistant response
+          const userMsgs = messages.filter(m => m.role === "user")
+          const assistantMsgs = messages.filter(m => m.role === "assistant")
+          if (userMsgs.length > 0 && assistantMsgs.length === 0) {
+            const firstUserText = typeof userMsgs[0].content === "string" ? userMsgs[0].content : ""
+            autoTitleConversation(conversationId, firstUserText, text).catch((err) => {
+              console.error("[auto-title] Background error:", err)
+            })
+          }
         }
       },
     })
