@@ -9,6 +9,7 @@ import { ChatThemePicker } from "@/components/settings/chat-theme-picker"
 import { ProviderSettings } from "@/components/settings/provider-settings"
 import { MemorySettings } from "@/components/settings/memory-settings"
 import { MemoryList } from "@/components/settings/memory-list"
+import { RagSettings } from "@/components/settings/rag-settings"
 import { ChatSettings } from "@/components/settings/chat-settings"
 import { Palette, Key, Brain } from "lucide-react"
 
@@ -58,6 +59,7 @@ export default function SettingsPage() {
 
       <TabsContent value="memory" className="space-y-4">
         <MemorySettings />
+        <RagSettings />
         <MemoryList />
       </TabsContent>
     </Tabs>
