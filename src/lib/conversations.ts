@@ -14,6 +14,7 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
       provider: string
       title?: string
       systemPrompt?: string
+      projectId?: string
     }): Conversation {
       const id = ulid()
       const now = new Date()
@@ -24,6 +25,7 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
           model: data.model,
           provider: data.provider,
           systemPrompt: data.systemPrompt || null,
+          projectId: data.projectId || null,
           createdAt: now,
           updatedAt: now,
         })
