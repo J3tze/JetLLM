@@ -1,6 +1,6 @@
 "use client"
 
-import { Plus, Trash2, MessageSquare, Settings } from "lucide-react"
+import { Plus, Trash2, MessageSquare, Settings, FolderPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -49,26 +49,22 @@ export function ChatSidebar({
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-extrabold tracking-tight">Jet<span style={{ color: "hsl(var(--accent-color))" }}>LLM</span></h1>
-          <Button variant="ghost" size="icon" onClick={onNew}>
-            <Plus className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center -space-x-1">
+            <Button variant="ghost" size="icon" onClick={onNewProject} title="New project">
+              <FolderPlus className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onNew} title="New chat">
+              <Plus className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <ScrollArea className="flex-1">
           {/* Projects section */}
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center justify-between pr-2">
+            <SidebarGroupLabel>
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Projects</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onNewProject()
-                }}
-                className="flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
