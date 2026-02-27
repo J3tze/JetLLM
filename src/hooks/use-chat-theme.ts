@@ -9,10 +9,26 @@ export type ChatThemeColors = {
   assistantBubble: string
   assistantBubbleFg: string
   assistantBorder: string
+  textColor: string // global chat text color
 }
 
 // Sentinel value: user bubble follows accent color
 export const USER_BUBBLE_ACCENT = "accent"
+
+export type BubbleStyle = "flat" | "minimal" | "full"
+
+export const CHAT_FONTS = [
+  { name: "Geist Sans", family: "var(--font-geist-sans)", builtin: true },
+  { name: "Geist Mono", family: "var(--font-geist-mono)", builtin: true },
+  { name: "Inter", family: "'Inter'", builtin: false },
+  { name: "Plus Jakarta Sans", family: "'Plus Jakarta Sans'", builtin: false },
+  { name: "Merriweather", family: "'Merriweather'", builtin: false },
+  { name: "Lora", family: "'Lora'", builtin: false },
+  { name: "JetBrains Mono", family: "'JetBrains Mono'", builtin: false },
+  { name: "Nunito", family: "'Nunito'", builtin: false },
+] as const
+
+export type ChatFont = (typeof CHAT_FONTS)[number]
 
 export type ChatThemePreset = {
   name: string
@@ -29,6 +45,7 @@ export const CHAT_THEME_PRESETS: readonly ChatThemePreset[] = [
       assistantBubble: "#131313",
       assistantBubbleFg: "#fafafa",
       assistantBorder: "#ffffff14",
+      textColor: "#fafafa",
     },
   },
   {
@@ -40,6 +57,7 @@ export const CHAT_THEME_PRESETS: readonly ChatThemePreset[] = [
       assistantBubble: "#1c1c1c",
       assistantBubbleFg: "#e5e5e5",
       assistantBorder: "#ffffff1a",
+      textColor: "#e5e5e5",
     },
   },
   {
@@ -51,6 +69,7 @@ export const CHAT_THEME_PRESETS: readonly ChatThemePreset[] = [
       assistantBubble: "#111827",
       assistantBubbleFg: "#e0e7ff",
       assistantBorder: "#3b82f633",
+      textColor: "#e0e7ff",
     },
   },
 ] as const
@@ -62,6 +81,7 @@ const CSS_VAR_MAP: Record<keyof ChatThemeColors, string> = {
   assistantBubble: "--chat-assistant-bubble",
   assistantBubbleFg: "--chat-assistant-bubble-fg",
   assistantBorder: "--chat-assistant-border",
+  textColor: "--chat-text-color",
 }
 
 function applyChatTheme(colors: ChatThemeColors) {
@@ -90,17 +110,42 @@ function applyGlassOpacity(opacity: number) {
   document.documentElement.style.setProperty("--glass-opacity", String(opacity))
 }
 
+function applyFont(fontName: string) {
+  const fontDef = CHAT_FONTS.find(f => f.name === fontName)
+  if (!fontDef) return
+
+  // Load external font via Google Fonts if not builtin
+  if (!fontDef.builtin) {
+    const linkId = `chat-font-${fontName.replace(/\s+/g, "-").toLowerCase()}`
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement("link")
+      link.id = linkId
+      link.rel = "stylesheet"
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;500;600;700&display=swap`
+      document.head.appendChild(link)
+    }
+  }
+
+  document.documentElement.style.setProperty("--chat-font", fontDef.family)
+}
+
+function applyBubbleStyle(style: BubbleStyle) {
+  document.documentElement.dataset.bubbleStyle = style
+}
+
 export function useChatTheme() {
   const [colors, setColors] = useState<ChatThemeColors>(CHAT_THEME_PRESETS[0].colors)
   const [presetName, setPresetName] = useState<string | null>("AMOLED Black")
   const [bgImage, setBgImageState] = useState<string>("")
   const [glassOpacity, setGlassOpacityState] = useState(0.7)
+  const [font, setFontState] = useState<string>("Geist Sans")
+  const [bubbleStyle, setBubbleStyleState] = useState<BubbleStyle>("flat")
 
   useEffect(() => {
     fetch("/api/settings")
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
-        const saved = settings["ui:chatTheme"] as { preset?: string; colors?: ChatThemeColors; bgImage?: string; glassOpacity?: number } | undefined
+        const saved = settings["ui:chatTheme"] as { preset?: string; colors?: ChatThemeColors; bgImage?: string; glassOpacity?: number; font?: string; bubbleStyle?: string } | undefined
         if (saved?.colors) {
           setColors(saved.colors)
           setPresetName(saved.preset ?? null)
@@ -114,17 +159,25 @@ export function useChatTheme() {
           setGlassOpacityState(saved.glassOpacity)
           applyGlassOpacity(saved.glassOpacity)
         }
+        if (saved?.font) {
+          setFontState(saved.font)
+          applyFont(saved.font)
+        }
+        if (saved?.bubbleStyle) {
+          setBubbleStyleState(saved.bubbleStyle as BubbleStyle)
+          applyBubbleStyle(saved.bubbleStyle as BubbleStyle)
+        }
       })
       .catch(() => {})
   }, [])
 
-  const persistTheme = useCallback((newColors: ChatThemeColors, preset: string | null, newBgImage: string, newGlassOpacity: number) => {
+  const persistTheme = useCallback((newColors: ChatThemeColors, preset: string | null, newBgImage: string, newGlassOpacity: number, newFont: string, newBubbleStyle: BubbleStyle) => {
     fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         key: "ui:chatTheme",
-        value: { preset, colors: newColors, bgImage: newBgImage, glassOpacity: newGlassOpacity },
+        value: { preset, colors: newColors, bgImage: newBgImage, glassOpacity: newGlassOpacity, font: newFont, bubbleStyle: newBubbleStyle },
       }),
     }).catch(() => {})
   }, [])
@@ -133,20 +186,20 @@ export function useChatTheme() {
     setColors(newColors)
     setPresetName(preset)
     applyChatTheme(newColors)
-    persistTheme(newColors, preset, bgImage, glassOpacity)
-  }, [bgImage, glassOpacity, persistTheme])
+    persistTheme(newColors, preset, bgImage, glassOpacity, font, bubbleStyle)
+  }, [bgImage, glassOpacity, font, bubbleStyle, persistTheme])
 
   const setBgImage = useCallback((url: string) => {
     setBgImageState(url)
     applyBgImage(url)
-    persistTheme(colors, presetName, url, glassOpacity)
-  }, [colors, presetName, glassOpacity, persistTheme])
+    persistTheme(colors, presetName, url, glassOpacity, font, bubbleStyle)
+  }, [colors, presetName, glassOpacity, font, bubbleStyle, persistTheme])
 
   const setGlassOpacity = useCallback((opacity: number) => {
     setGlassOpacityState(opacity)
     applyGlassOpacity(opacity)
-    persistTheme(colors, presetName, bgImage, opacity)
-  }, [colors, presetName, bgImage, persistTheme])
+    persistTheme(colors, presetName, bgImage, opacity, font, bubbleStyle)
+  }, [colors, presetName, bgImage, font, bubbleStyle, persistTheme])
 
   const setThemePreset = useCallback((preset: ChatThemePreset) => {
     saveTheme(preset.colors, preset.name)
@@ -159,6 +212,18 @@ export function useChatTheme() {
     saveTheme(newColors, isResetToAccent ? presetName : null)
   }, [colors, presetName, saveTheme])
 
+  const setFont = useCallback((fontName: string) => {
+    setFontState(fontName)
+    applyFont(fontName)
+    persistTheme(colors, presetName, bgImage, glassOpacity, fontName, bubbleStyle)
+  }, [colors, presetName, bgImage, glassOpacity, bubbleStyle, persistTheme])
+
+  const setBubbleStyle = useCallback((style: BubbleStyle) => {
+    setBubbleStyleState(style)
+    applyBubbleStyle(style)
+    persistTheme(colors, presetName, bgImage, glassOpacity, font, style)
+  }, [colors, presetName, bgImage, glassOpacity, font, persistTheme])
+
   return {
     colors,
     presetName,
@@ -169,5 +234,10 @@ export function useChatTheme() {
     setBgImage,
     glassOpacity,
     setGlassOpacity,
+    font,
+    setFont,
+    fonts: CHAT_FONTS,
+    bubbleStyle,
+    setBubbleStyle,
   }
 }
