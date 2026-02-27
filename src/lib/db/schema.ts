@@ -1,12 +1,27 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
 
+export const projects = sqliteTable("projects", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  systemPrompt: text("system_prompt"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title").notNull().default("New Chat"),
   model: text("model").notNull(),
   provider: text("provider").notNull(),
   systemPrompt: text("system_prompt"),
+  projectId: text("project_id")
+    .references(() => projects.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -35,6 +50,22 @@ export const memories = sqliteTable("memories", {
   content: text("content").notNull(),
   sourceConversationId: text("source_conversation_id")
     .references(() => conversations.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
+export const documents = sqliteTable("documents", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  chunkCount: integer("chunk_count").notNull().default(0),
+  status: text("status", { enum: ["pending", "processing", "ready", "error"] })
+    .notNull()
+    .default("pending"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
