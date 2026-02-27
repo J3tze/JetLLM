@@ -55,8 +55,8 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
           setProvider("openai")
           setModel("gpt-4o")
         }
-        const hasFirecrawlKey = !!settings["search:firecrawlKey"]
-        setSearchAvailable(hasFirecrawlKey)
+        const hasTavilyKey = !!settings["search:tavilyKey"]
+        setSearchAvailable(hasTavilyKey)
       })
       .catch(() => {
         setProvider("openai")

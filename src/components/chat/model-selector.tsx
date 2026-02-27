@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import {
   Select,
   SelectContent,
@@ -45,16 +45,18 @@ export function ModelSelector({
   const staticModels = providerDef?.defaultModels ?? []
 
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({})
+  const fetchedRef = useRef<Record<string, boolean>>({})
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (!FETCHABLE_PROVIDERS.has(provider)) return
-    if (fetchedModels[provider]) return
+    if (fetchedRef.current[provider]) return
+    fetchedRef.current[provider] = true
 
     setLoading(true)
     fetch(`/api/providers/models?provider=${provider}`)
-      .then(res => res.json())
+      .then(res => res.ok ? res.json() : { models: [] })
       .then((data: { models: string[] }) => {
         setFetchedModels(prev => ({ ...prev, [provider]: data.models }))
       })
@@ -62,7 +64,7 @@ export function ModelSelector({
         setFetchedModels(prev => ({ ...prev, [provider]: [] }))
       })
       .finally(() => setLoading(false))
-  }, [provider, fetchedModels])
+  }, [provider])
 
   const models = useMemo(() => {
     return staticModels.length > 0

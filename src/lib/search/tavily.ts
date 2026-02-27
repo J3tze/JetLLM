@@ -6,45 +6,46 @@ export type SearchResult = {
   content: string
 }
 
-const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v1/search"
+const TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 const MAX_CONTENT_LENGTH = 1000
 const DEFAULT_LIMIT = 5
 const TIMEOUT_MS = 10000
 
 export async function searchWeb(query: string, limit: number = DEFAULT_LIMIT): Promise<SearchResult[]> {
-  const apiKey = getSetting<string>("search:firecrawlKey")
+  const apiKey = getSetting<string>("search:tavilyKey")
   if (!apiKey) {
-    throw new Error("Firecrawl API key not configured")
+    throw new Error("Tavily API key not configured")
   }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const res = await fetch(FIRECRAWL_SEARCH_URL, {
+    const res = await fetch(TAVILY_SEARCH_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
+        api_key: apiKey,
         query,
-        limit,
-        scrapeOptions: { formats: ["markdown"] },
+        max_results: limit,
+        include_answer: false,
+        search_depth: "basic",
       }),
       signal: controller.signal,
     })
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => "Unknown error")
-      throw new Error(`Firecrawl API error (${res.status}): ${errorText}`)
+      throw new Error(`Tavily API error (${res.status}): ${errorText}`)
     }
 
     const data = await res.json()
-    const results: SearchResult[] = (data.data || []).map((item: { title?: string; url?: string; markdown?: string }) => ({
+    const results: SearchResult[] = (data.results || []).map((item: { title?: string; url?: string; content?: string }) => ({
       title: item.title || "Untitled",
       url: item.url || "",
-      content: (item.markdown || "").slice(0, MAX_CONTENT_LENGTH),
+      content: (item.content || "").slice(0, MAX_CONTENT_LENGTH),
     }))
 
     return results

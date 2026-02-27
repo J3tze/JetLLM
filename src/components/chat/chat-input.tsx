@@ -81,7 +81,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Configure a Firecrawl API key in Settings &gt; Providers to enable web search.
+                    Configure a Tavily API key in Settings &gt; Providers to enable web search.
                   </p>
                 )}
               </div>

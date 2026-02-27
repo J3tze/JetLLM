@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test -d \"c:\\\\Users\\\\Jetze\\\\Documents\\\\Code Projects\\\\JetLLM\")",
+      "Bash(wc -l \"c:\\\\Users\\\\Jetze\\\\Documents\\\\Code Projects\\\\JetLLM\"/*)",
+      "WebFetch(domain:open-vsx.org)",
+      "Read(//c/Users/Jetze/AppData/Roaming/VSCodium/User/globalStorage/zokugun.sync-settings/**)",
+      "WebFetch(domain:github.com)",
+      "Bash(winget install --id GLab.GLab --accept-source-agreements --accept-package-agreements)",
+      "Bash(glab --version)",
+      "Bash(glab auth status)",
+      "Bash(glab repo create vscodium-settings --private --description \"VSCodium settings sync\")",
+      "Bash(glab api projects/J3tze%2Fvscodium-settings/repository/tree)",
+      "Bash(glab api \"projects/J3tze%2Fvscodium-settings/repository/tree?recursive=true\")",
+      "WebFetch(domain:ai-sdk.dev)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(cd /c/Users/Jetze/Documents/Code Projects/JetLLM)",
+      "Bash(git commit:*)",
+      "Bash(npm run build)",
+      "Bash(sqlite3 ./data/jetllm.db \"SELECT key, substr\\(value, 1, 100\\) FROM settings WHERE key LIKE ''%chat%'' OR key LIKE ''%bg%'';\")",
+      "Bash(node -e \":*)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(git stash)",
+      "Bash(git stash pop)",
+      "Bash(git rm AGENTS.md)",
+      "Bash(git add CLAUDE.md src/app/globals.css src/app/page.tsx src/components/chat/chat-input.tsx src/components/chat/chat-message.tsx src/components/chat/chat-panel.tsx src/components/chat/chat-sidebar.tsx src/components/chat/message-list.tsx src/components/chat/model-selector.tsx src/components/theme-initializer.tsx src/components/ui/sidebar.tsx)",
+      "Bash(git push origin master)",
+      "Bash(git merge origin/feat/wallpaper-glass-transparency)",
+      "Bash(npm run dev)",
+      "Bash(npm install sqlite-vec)"
+    ]
+  }
+}

@@ -5,7 +5,7 @@ import { addMessage, getConversation } from "@/lib/conversations"
 import { getFormattedMemories } from "@/lib/memory"
 import { getSetting } from "@/lib/settings"
 import { extractMemories } from "@/lib/memory/extract"
-import { searchWeb, formatSearchResults } from "@/lib/search/firecrawl"
+import { searchWeb, formatSearchResults } from "@/lib/search/tavily"
 
 export const maxDuration = 60
 
@@ -82,10 +82,10 @@ export async function POST(req: Request) {
     }
 
     // Web search: check if API key is configured
-    const firecrawlKey = getSetting<string>("search:firecrawlKey")
+    const tavilyKey = getSetting<string>("search:tavilyKey")
 
     // Always-search mode: pre-fetch results into system prompt
-    if (webSearch && firecrawlKey) {
+    if (webSearch && tavilyKey) {
       const lastUserMessage = messages.filter(m => m.role === "user").pop()
       if (lastUserMessage) {
         const query = typeof lastUserMessage.content === "string"
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       // Web search tool (only when API key configured)
-      ...(firecrawlKey ? {
+      ...(tavilyKey ? {
         tools: {
           web_search: tool({
             description: "Search the web for current information. Use when the user asks about recent events, needs up-to-date data, or when your training data may be outdated.",

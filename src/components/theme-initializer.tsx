@@ -33,7 +33,8 @@ function applyWallpaper(bgColor: string, bgImage?: string) {
   }
   el.style.backgroundColor = bgColor
   if (bgImage) {
-    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${bgImage})`
+    const safeUrl = bgImage.replace(/"/g, "%22")
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url("${safeUrl}")`
   } else {
     el.style.backgroundImage = "none"
   }
@@ -42,7 +43,10 @@ function applyWallpaper(bgColor: string, bgImage?: string) {
 export function ThemeInitializer() {
   useEffect(() => {
     fetch("/api/settings")
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`Settings fetch failed: ${res.status}`)
+        return res.json()
+      })
       .then((settings: Record<string, unknown>) => {
         // Apply accent color to all accent-derived variables
         const accent = settings["ui:accentColor"] as { hsl?: string } | undefined
@@ -87,14 +91,18 @@ export function ThemeInitializer() {
           document.documentElement.style.setProperty("--glass-opacity", String(chatTheme.glassOpacity))
         }
 
-        // Apply font
+        // Apply font (deduplicate link tags)
         if (chatTheme?.font) {
           const fontDef = CHAT_FONTS.find((f: { name: string }) => f.name === chatTheme.font)
           if (fontDef && !fontDef.builtin) {
-            const link = document.createElement("link")
-            link.rel = "stylesheet"
-            link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(chatTheme.font)}:wght@300;400;500;600;700&display=swap`
-            document.head.appendChild(link)
+            const linkId = `chat-font-${chatTheme.font.replace(/\s+/g, "-").toLowerCase()}`
+            if (!document.getElementById(linkId)) {
+              const link = document.createElement("link")
+              link.id = linkId
+              link.rel = "stylesheet"
+              link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(chatTheme.font)}:wght@300;400;500;600;700&display=swap`
+              document.head.appendChild(link)
+            }
           }
           if (fontDef) {
             document.documentElement.style.setProperty("--chat-font", fontDef.family)
@@ -106,7 +114,7 @@ export function ThemeInitializer() {
           document.documentElement.dataset.bubbleStyle = chatTheme.bubbleStyle
         }
       })
-      .catch(() => {})
+      .catch((err) => console.warn("[ThemeInitializer] Failed to load settings:", err))
   }, [])
 
   return null

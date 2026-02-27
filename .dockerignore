@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.claude
+data
+*.md
+.env*
+.codex-dev.log
+.codex-shots
+.playwright-mcp
+*.png
+*.jpg
+!public/**

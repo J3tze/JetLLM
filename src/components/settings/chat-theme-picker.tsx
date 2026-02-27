@@ -8,7 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { ImagePlus, X } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024 // 2 MB
 
 const COLOR_ROWS: { key: keyof ChatThemeColors; label: string }[] = [
   { key: "chatBg", label: "Chat Background" },
@@ -107,10 +110,16 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image must be smaller than 2 MB")
+      e.target.value = ""
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       setBgImage(reader.result as string)
     }
+    reader.onerror = () => toast.error("Failed to read image file")
     reader.readAsDataURL(file)
     e.target.value = "" // reset so same file can be re-selected
   }
@@ -254,7 +263,7 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
           {bgImage && (
             <div
               className="h-16 w-full rounded-lg border border-border bg-cover bg-center"
-              style={{ backgroundImage: `url(${bgImage})` }}
+              style={{ backgroundImage: `url("${bgImage.replace(/"/g, "%22")}")` }}
             />
           )}
         </div>
