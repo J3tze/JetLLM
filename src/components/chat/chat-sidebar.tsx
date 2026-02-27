@@ -1,8 +1,14 @@
 "use client"
 
-import { Plus, Trash2, MessageSquare, Settings, FolderPlus } from "lucide-react"
+import { Plus, Trash2, MessageSquare, Settings, FolderPlus, MoreHorizontal, Pin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +21,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuAction,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import type { Conversation } from "@/hooks/use-conversations"
 import type { Project } from "@/hooks/use-projects"
@@ -44,16 +51,20 @@ export function ChatSidebar({
   onDelete,
   onDeleteProject,
 }: ChatSidebarProps) {
+  const { setOpenMobile } = useSidebar()
+
+  const closeMobile = () => setOpenMobile(false)
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-extrabold tracking-tight">Jet<span style={{ color: "hsl(var(--accent-color))" }}>LLM</span></h1>
           <div className="flex items-center -space-x-1">
-            <Button variant="ghost" size="icon" onClick={onNewProject} title="New project">
+            <Button variant="ghost" size="icon" onClick={() => { onNewProject(); closeMobile() }} title="New project">
               <FolderPlus className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onNew} title="New chat">
+            <Button variant="ghost" size="icon" onClick={() => { onNew(); closeMobile() }} title="New chat">
               <Plus className="h-5 w-5" />
             </Button>
           </div>
@@ -72,20 +83,27 @@ export function ChatSidebar({
                   <SidebarMenuItem key={project.id}>
                     <SidebarMenuButton
                       isActive={project.id === activeProjectId}
-                      onClick={() => onSelectProject(project.id)}
+                      onClick={() => { onSelectProject(project.id); closeMobile() }}
                     >
                       <span className="text-base leading-none shrink-0">{project.icon || "📁"}</span>
                       <span className="truncate">{project.name}</span>
                     </SidebarMenuButton>
-                    <SidebarMenuAction
-                      showOnHover
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDeleteProject(project.id)
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </SidebarMenuAction>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuAction showOnHover>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </SidebarMenuAction>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem
+                          onClick={() => onDeleteProject(project.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </SidebarMenuItem>
                 ))}
                 {projects.length === 0 && (
@@ -108,20 +126,31 @@ export function ChatSidebar({
                   <SidebarMenuItem key={conv.id}>
                     <SidebarMenuButton
                       isActive={conv.id === activeId}
-                      onClick={() => onSelect(conv.id)}
+                      onClick={() => { onSelect(conv.id); closeMobile() }}
                     >
                       <MessageSquare className="h-4 w-4" />
                       <span className="truncate">{conv.title}</span>
                     </SidebarMenuButton>
-                    <SidebarMenuAction
-                      showOnHover
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDelete(conv.id)
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </SidebarMenuAction>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuAction showOnHover>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </SidebarMenuAction>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem onClick={() => { /* TODO: pin */ }}>
+                          <Pin className="h-4 w-4 mr-2" />
+                          Pin
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onDelete(conv.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </SidebarMenuItem>
                 ))}
                 {conversations.length === 0 && (
