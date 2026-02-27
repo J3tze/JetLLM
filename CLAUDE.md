@@ -13,7 +13,7 @@ JetLLM is a multi-provider LLM web UI with streaming chat, automatic memory, RAG
 - **Database:** SQLite via Drizzle ORM + better-sqlite3 (stored at `./data/jetllm.db`, override with `DB_PATH` env var)
 - **UI:** Tailwind CSS v4 + shadcn/ui (new-york style, lucide icons) + next-themes
 - **Testing:** Vitest (node environment, `@` path alias configured)
-- **Deployment:** Docker planned (no Dockerfile yet; data volume at `/app/data`)
+- **Deployment:** Docker via multi-stage build (`Dockerfile`, `docker-compose.yml`); `output: "standalone"` in next.config; data volume at `/app/data`
 
 ## Commands
 
@@ -29,6 +29,8 @@ npm run db:generate  # Generate Drizzle migrations
 npm run db:migrate   # Run pending migrations
 npm run db:studio    # Launch Drizzle Studio GUI
 npx shadcn@latest add <component>  # Add a new shadcn/ui component
+docker compose build               # Build Docker image
+docker compose up                   # Run in Docker (http://localhost:3000)
 ```
 
 ## Architecture
@@ -40,7 +42,8 @@ npx shadcn@latest add <component>  # Add a new shadcn/ui component
 - `conversations/` — CRUD for conversations; `[id]/messages` for message history
 - `memory/` — CRUD for memories; `[id]` for individual memory GET/PATCH/DELETE
 - `providers/models/` — GET models list from OpenRouter (cached 1 hour)
-- `settings/` — GET all settings, PUT key/value pairs
+- `settings/` — GET public settings (provider keys filtered out), PUT key/value pairs. All route handlers wrapped in try/catch.
+- `providers/configs/` — GET provider configs (returns `hasKey` boolean, never raw API keys), PUT to save provider API key/baseUrl
 
 ### Service Layer (`src/lib/`)
 Services use a **factory pattern** for testability: `createSettingsService(db)`, `createConversationsService(db)`, and `createMemoryService(db)` accept a Drizzle db instance. Each also exports **convenience functions** (e.g., `getSetting`, `addMessage`, `createMemory`) that use the default db singleton from `getDb()`.
@@ -50,7 +53,7 @@ Services use a **factory pattern** for testability: `createSettingsService(db)`,
 - `index.ts` — `getModel(providerId, modelId)` factory that reads API keys from settings (`provider:{id}` key) and returns a `LanguageModel` instance. Groq/OpenRouter/Together/Custom all use `createOpenAI` with custom base URLs.
 
 ### Memory System (`src/lib/memory/`, `src/lib/memory.ts`)
-- `memory.ts` — Memory service (CRUD, `existsByContent` dedup, `getFormattedForInjection` for system prompt injection)
+- `memory.ts` — Memory service (CRUD, case-insensitive `existsByContent` dedup via `lower()`, `getFormattedForInjection` with `.limit(50)` for system prompt injection)
 - `memory/prompts.ts` — Extraction prompt template with `buildExtractionPrompt(existingMemories, recentMessages)`
 - `memory/extract.ts` — `extractMemories(conversationId)`: fire-and-forget background job using `generateText()` (temperature 0) with a configurable cheap/fast model. Uses last 10 messages as context. Parses JSON response (handles markdown-wrapped ```json blocks), deduplicates via `existsByContent`, stores new memories. Content capped at 200 chars (validation); only extracts `fact` and `preference` types.
 - Memory types: `fact`, `preference`, `summary` (schema supports all three; extraction only produces `fact`/`preference`)
@@ -59,7 +62,7 @@ Services use a **factory pattern** for testability: `createSettingsService(db)`,
 
 ### Database (`src/lib/db/`)
 - `schema.ts` — Four tables: `conversations`, `messages` (FK cascade delete; has `toolCalls` and `metadata` text columns), `memories` (FK set null on conversation delete), `settings` (key-value)
-- `index.ts` — `getDb()` singleton with WAL mode and foreign keys enabled
+- `index.ts` — `getDb()` singleton with WAL mode, foreign keys, and `busy_timeout = 5000` enabled. `ensureTables()` auto-creates all tables via `CREATE TABLE IF NOT EXISTS` on first connection — no separate `db:push` needed in production/Docker.
 
 ### Frontend (`src/components/`, `src/hooks/`)
 - `chat/chat-panel.tsx` — Main chat container. Manages provider/model state, `useChat` hook, auto-creates conversations on first message, persists user messages to DB before sending. Top bar has only sidebar trigger + provider/model selectors (no parameter controls).
@@ -67,19 +70,20 @@ Services use a **factory pattern** for testability: `createSettingsService(db)`,
 - `chat/model-selector.tsx` — Provider + model dropdowns. Switches to searchable combobox for providers with many models (OpenRouter). Falls back to text input when no default models.
 - `chat/message-list.tsx` — Auto-scrolling message list with streaming support. Tracks viewport scroll position, pauses auto-scroll when user scrolls up, shows scroll-to-bottom button.
 - `chat/chat-input.tsx` — Message composition textarea with send button.
-- `chat/chat-message.tsx` — Minimal flat message layout (no avatars, no bubbles). User messages get a subtle `bg-white/[0.03]` tint.
+- `chat/chat-message.tsx` — Message layout with 3 bubble styles (flat, minimal, full). Applies `--chat-font`, `--chat-text-color`, and per-role foreground CSS variables via inline styles.
+- `chat/code-block.tsx` — Syntax-highlighted code blocks using Shiki (lazy-loaded, cached singleton highlighter). Header bar with language label + copy button. Fallback to plain `<pre>` while Shiki loads. Wired into ReactMarkdown via `components` override in `message-list.tsx`.
 - `chat/parameter-popover.tsx` — Temperature, Max Tokens, Top P sliders (component exists but currently not rendered in the top bar).
 - `components/jetllm-logo.tsx` — SVG logo with accent-colored origami plane and "LLM" text.
 - `components/theme-initializer.tsx` — Loads accent color + chat theme from settings on mount. Applies CSS variables via JS on `documentElement`. Also creates a fixed-position wallpaper div (`#jetllm-wallpaper`) in the DOM with the background image + 40% dark scrim overlay.
 - `hooks/use-accent-color.ts` — Manages accent color (7 presets). `applyAccent()` sets `--accent-color`, `--primary`, `--ring`, `--sidebar-primary`, `--sidebar-accent`, `--sidebar-ring`, `--chart-1` directly on `document.documentElement`.
-- `hooks/use-chat-theme.ts` — Chat theme presets (AMOLED Black, Dark Gray, Midnight Blue) + individual color pickers. Manages `--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc. Supports background image upload (data URL stored in settings).
+- `hooks/use-chat-theme.ts` — Chat theme presets (AMOLED Black, Dark Gray, Midnight Blue) + individual color pickers. Manages `--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc. Supports background image upload (data URL, max 2 MB), 8 font choices, 3 bubble styles (flat/minimal/full), glass opacity slider.
 - `hooks/use-conversations.ts` — Fetches, creates, deletes conversations.
 - `hooks/use-memories.ts` — React hook for memory CRUD via `/api/memory`.
 
 ### Settings Page (`src/app/settings/page.tsx`)
 Tabbed layout with three tabs:
-- **General** — Chat settings (user name via `chat:userName`, system prompt via `chat:systemPrompt`), accent color picker, chat theme picker (presets, individual hex colors, background image)
-- **Providers** — API key configuration per provider
+- **General** — Chat settings (user name via `chat:userName`, system prompt via `chat:systemPrompt`), accent color picker, chat theme picker (presets, individual hex colors, background image, font selector, bubble style, glass opacity)
+- **Providers** — API key configuration per provider (keys loaded/saved via `/api/providers/configs`, never exposed via public GET `/api/settings`)
 - **Memory** — Toggle, extraction model picker (same searchable dropdown as chat), stored memories list with add/edit/delete
 
 ### Chat Flow
@@ -97,8 +101,8 @@ Tabbed layout with three tabs:
 - **Base theme colors use OKLch color space** in `globals.css` (e.g. `oklch(0.577 0.245 27.325)`). Accent-derived colors use HSL.
 - Dynamic accent via `--accent-color` CSS variable (HSL format, e.g. `"220 90% 56%"`). Applied to all UI elements via JS (`applyAccent()` sets `--primary`, `--ring`, `--sidebar-*`, `--chart-1` directly on documentElement to bypass Tailwind v4 cascade issues).
 - Chat theme colors (`--chat-bg`, `--chat-user-bubble`, `--chat-assistant-bubble`, etc.) customizable via presets or individual hex pickers. User bubble defaults to accent color via `"accent"` sentinel.
-- **Minimal UI approach:** No message bubbles/avatars, no borders between header/content/input, transparent backgrounds. The sidebar is solid black to blend with AMOLED edges.
-- **Wallpaper system:** `ThemeInitializer` injects a fixed-position `#jetllm-wallpaper` div with `z-index: -1` behind all content. Background image stored as data URL in settings (`ui:chatTheme.bgImage`), rendered with a 40% dark scrim via `linear-gradient` overlay. All UI layers above are transparent so the wallpaper shows through.
+- **Minimal UI approach:** No avatars, no borders between header/content/input, transparent backgrounds. Three bubble styles selectable in settings (flat/minimal/full). The sidebar is solid black to blend with AMOLED edges.
+- **Wallpaper system:** `ThemeInitializer` injects a fixed-position `#jetllm-wallpaper` div with `z-index: -1` behind all content. Background image stored as data URL in settings (`ui:chatTheme.bgImage`), rendered with a 40% dark scrim via `linear-gradient` overlay. URL values are quoted in CSS `url()` calls for safety. Default wallpaper shipped at `/public/default-wallpaper.jpg`. All UI layers above are transparent so the wallpaper shows through.
 - `.glass-panel` and `.glass-control` utility classes in `globals.css` still available for components that need frosted glass effects.
 - Custom dark variant: `@custom-variant dark (&:is(.dark *))` in globals.css.
 - Safe area support: `.safe-area-top`/`.safe-area-bottom` classes for notched devices; root uses `height: 100dvh`.
@@ -107,12 +111,15 @@ Tabbed layout with three tabs:
 
 - **All IDs use ULID format** (sortable, unique, via `ulid` package)
 - **Timestamps:** Drizzle `integer` with `{ mode: "timestamp" }` — stored as unix epoch integers, returned as Date objects
-- **Settings storage:** key-value in SQLite, JSON-serialized values. Provider configs use key `provider:{id}`, UI settings use `ui:` prefix, memory settings use `memory:` prefix, chat settings use `chat:` prefix (`chat:userName`, `chat:systemPrompt`)
+- **Settings storage:** key-value in SQLite, JSON-serialized values. Provider configs use key `provider:{id}` (never exposed via public GET), UI settings use `ui:` prefix, memory settings use `memory:` prefix, chat settings use `chat:` prefix (`chat:userName`, `chat:systemPrompt`)
+- **Error handling:** All API routes wrap handlers in try/catch, return proper 400/404/500 status codes with JSON error bodies. `SyntaxError` from `request.json()` returns 400. Input validation on role enums, content length, type enums.
 - **Streaming-first:** Chat API returns `toUIMessageStreamResponse()`, frontend uses `useChat` hook
 - **Ref-based transport body:** `ChatPanel` uses refs (`stateRef`, `convIdRef`) so `DefaultChatTransport.body()` always reads the latest state values (avoids stale closures with memoized transport)
 - **Hydration delay:** Page components return `null` until a `mounted` useState flips to `true`, preventing hydration mismatches from browser extensions
 - **Default model:** Stored in settings under key `default-model` as `{ provider, model }`, auto-saved on selection change (500ms debounce)
 - **Accent via JS, not CSS cascade:** All accent-derived CSS variables are set via `document.documentElement.style.setProperty()` in `applyAccent()` and `ThemeInitializer`, not via CSS `var()` references in `.dark` block (Tailwind v4 doesn't resolve nested `var()` in custom properties reliably)
+- **Chat appearance CSS variables:** `--chat-font` (font family for messages), `--chat-text-color` (global text color), `--chat-user-bubble-fg`/`--chat-assistant-bubble-fg` (per-role text overrides). Bubble style communicated via `data-bubble-style` attribute on `documentElement`, synced to `ChatPanel` via `MutationObserver`.
+- **Code block highlighting:** Shiki highlighter is lazily created as a module-level singleton promise. Languages loaded on demand. `github-dark-default` theme. `CodeBlock` component uses `not-prose` to escape Tailwind Typography.
 
 ## Testing Patterns
 
@@ -146,7 +153,13 @@ Service worker at `/public/sw.js` uses network-first caching strategy (skips API
 - Prefer targeted lint/test commands for touched files first.
 - Do not revert unrelated local changes.
 
+## Docker
+
+Multi-stage build: `deps` (Alpine + python3/make/g++ for better-sqlite3 native compilation) → `builder` (npm run build) → `runner` (minimal production image). `docker-compose.yml` maps a named volume `jetllm-data` to `/app/data` for SQLite persistence. Tables auto-created on first request via `ensureTables()`.
+
 ## Planning Docs
 
 - Design doc: `docs/plans/2026-02-24-jetllm-design.md`
 - MVP plan: `docs/plans/2026-02-24-jetllm-mvp-plan.md`
+- Chat appearance: `docs/plans/2026-02-27-chat-appearance-design.md`
+- Code blocks: `docs/plans/2026-02-27-code-blocks-design.md`
