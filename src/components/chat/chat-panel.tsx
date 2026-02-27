@@ -202,7 +202,7 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-2 flex items-center gap-2 safe-area-top">
+      <div className="px-4 py-3 flex items-center gap-2 safe-area-top">
         <SidebarTrigger className="h-8 w-8" />
         <ModelSelector
           provider={provider}

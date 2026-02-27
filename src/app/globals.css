@@ -219,6 +219,11 @@ html[data-wallpaper] [data-slot="command"] {
   backdrop-filter: blur(var(--glass-blur)) saturate(120%);
 }
 
+html[data-wallpaper] [data-slot="card"] {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+}
+
 /* Safe area insets for notched devices (iPhone etc.) */
 @supports (padding: env(safe-area-inset-top)) {
   .safe-area-top {

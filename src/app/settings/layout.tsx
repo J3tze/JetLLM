@@ -15,8 +15,8 @@ export default function SettingsLayout({
   if (!mounted) return null
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center gap-4 safe-area-top">
+    <div className="min-h-screen bg-background [[data-wallpaper]_&]:bg-transparent">
+      <header className="border-b border-border px-6 py-4 flex items-center gap-4 safe-area-top [[data-wallpaper]_&]:glass-panel">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/">
             <ArrowLeft className="h-4 w-4" />
