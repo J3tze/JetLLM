@@ -147,6 +147,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background-color: var(--background);
+  }
   body {
     @apply text-foreground;
     background-color: transparent;
@@ -186,6 +189,32 @@
 /* Accent-tinted scrollbar thumb */
 .dark [data-slot="scroll-area-thumb"] {
   background-color: hsl(var(--accent-color) / 0.3);
+}
+
+/* Wallpaper-active mode: sidebar + overlays become translucent glass */
+html[data-wallpaper] {
+  --glass-opacity: 0.7;
+  --sidebar: rgba(0, 0, 0, var(--glass-opacity));
+  --popover: rgba(10, 10, 10, var(--glass-opacity));
+  --card: rgba(10, 10, 10, var(--glass-opacity));
+}
+
+html[data-wallpaper] [data-slot="sidebar-inner"] {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+}
+
+html[data-wallpaper] [data-slot="sidebar"][data-mobile="true"] {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+}
+
+html[data-wallpaper] [data-slot="popover-content"],
+html[data-wallpaper] [data-slot="dropdown-menu-content"],
+html[data-wallpaper] [data-slot="select-content"],
+html[data-wallpaper] [data-slot="command"] {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(120%);
 }
 
 /* Safe area insets for notched devices (iPhone etc.) */

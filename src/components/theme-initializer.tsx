@@ -56,7 +56,7 @@ export function ThemeInitializer() {
         }
 
         // Apply chat theme colors
-        const chatTheme = settings["ui:chatTheme"] as { colors?: Record<string, string>; bgImage?: string } | undefined
+        const chatTheme = settings["ui:chatTheme"] as { colors?: Record<string, string>; bgImage?: string; glassOpacity?: number } | undefined
         if (chatTheme?.colors) {
           const el = document.documentElement
           for (const [key, value] of Object.entries(chatTheme.colors)) {
@@ -70,9 +70,17 @@ export function ThemeInitializer() {
           }
         }
 
-        // Apply wallpaper
+        // Apply wallpaper and signal wallpaper mode for CSS (glass sidebar, etc.)
         const bgColor = chatTheme?.colors?.chatBg || "#000000"
         applyWallpaper(bgColor, chatTheme?.bgImage)
+        if (chatTheme?.bgImage) {
+          document.documentElement.dataset.wallpaper = ""
+        } else {
+          delete document.documentElement.dataset.wallpaper
+        }
+        if (chatTheme?.glassOpacity !== undefined) {
+          document.documentElement.style.setProperty("--glass-opacity", String(chatTheme.glassOpacity))
+        }
       })
       .catch(() => {})
   }, [])

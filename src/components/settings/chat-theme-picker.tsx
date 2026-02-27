@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
 import { ImagePlus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -75,10 +76,12 @@ type ChatThemeState = {
   setCustomColor: (key: keyof ChatThemeColors, hex: string) => void
   bgImage: string
   setBgImage: (url: string) => void
+  glassOpacity: number
+  setGlassOpacity: (opacity: number) => void
 }
 
 export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: string; chatThemeState: ChatThemeState }) {
-  const { colors, presetName, presets, setThemePreset, setCustomColor, bgImage, setBgImage } = chatThemeState
+  const { colors, presetName, presets, setThemePreset, setCustomColor, bgImage, setBgImage, glassOpacity, setGlassOpacity } = chatThemeState
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,6 +187,25 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
             />
           )}
         </div>
+
+        {bgImage && (
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Panel Transparency</Label>
+              <span className="text-xs font-mono text-muted-foreground">{Math.round(glassOpacity * 100)}%</span>
+            </div>
+            <Slider
+              value={[glassOpacity]}
+              onValueChange={([v]) => setGlassOpacity(v)}
+              min={0.1}
+              max={1}
+              step={0.05}
+            />
+            <p className="text-[10px] text-muted-foreground/60">
+              Controls sidebar and menu opacity over the wallpaper
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

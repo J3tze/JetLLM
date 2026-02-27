@@ -79,18 +79,28 @@ function applyChatTheme(colors: ChatThemeColors) {
 
 function applyBgImage(url: string) {
   document.documentElement.style.setProperty("--chat-bg-image", url ? `url(${url})` : "none")
+  if (url) {
+    document.documentElement.dataset.wallpaper = ""
+  } else {
+    delete document.documentElement.dataset.wallpaper
+  }
+}
+
+function applyGlassOpacity(opacity: number) {
+  document.documentElement.style.setProperty("--glass-opacity", String(opacity))
 }
 
 export function useChatTheme() {
   const [colors, setColors] = useState<ChatThemeColors>(CHAT_THEME_PRESETS[0].colors)
   const [presetName, setPresetName] = useState<string | null>("AMOLED Black")
   const [bgImage, setBgImageState] = useState<string>("")
+  const [glassOpacity, setGlassOpacityState] = useState(0.7)
 
   useEffect(() => {
     fetch("/api/settings")
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
-        const saved = settings["ui:chatTheme"] as { preset?: string; colors?: ChatThemeColors; bgImage?: string } | undefined
+        const saved = settings["ui:chatTheme"] as { preset?: string; colors?: ChatThemeColors; bgImage?: string; glassOpacity?: number } | undefined
         if (saved?.colors) {
           setColors(saved.colors)
           setPresetName(saved.preset ?? null)
@@ -100,17 +110,21 @@ export function useChatTheme() {
           setBgImageState(saved.bgImage)
           applyBgImage(saved.bgImage)
         }
+        if (saved?.glassOpacity !== undefined) {
+          setGlassOpacityState(saved.glassOpacity)
+          applyGlassOpacity(saved.glassOpacity)
+        }
       })
       .catch(() => {})
   }, [])
 
-  const persistTheme = useCallback((newColors: ChatThemeColors, preset: string | null, newBgImage: string) => {
+  const persistTheme = useCallback((newColors: ChatThemeColors, preset: string | null, newBgImage: string, newGlassOpacity: number) => {
     fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         key: "ui:chatTheme",
-        value: { preset, colors: newColors, bgImage: newBgImage },
+        value: { preset, colors: newColors, bgImage: newBgImage, glassOpacity: newGlassOpacity },
       }),
     }).catch(() => {})
   }, [])
@@ -119,14 +133,20 @@ export function useChatTheme() {
     setColors(newColors)
     setPresetName(preset)
     applyChatTheme(newColors)
-    persistTheme(newColors, preset, bgImage)
-  }, [bgImage, persistTheme])
+    persistTheme(newColors, preset, bgImage, glassOpacity)
+  }, [bgImage, glassOpacity, persistTheme])
 
   const setBgImage = useCallback((url: string) => {
     setBgImageState(url)
     applyBgImage(url)
-    persistTheme(colors, presetName, url)
-  }, [colors, presetName, persistTheme])
+    persistTheme(colors, presetName, url, glassOpacity)
+  }, [colors, presetName, glassOpacity, persistTheme])
+
+  const setGlassOpacity = useCallback((opacity: number) => {
+    setGlassOpacityState(opacity)
+    applyGlassOpacity(opacity)
+    persistTheme(colors, presetName, bgImage, opacity)
+  }, [colors, presetName, bgImage, persistTheme])
 
   const setThemePreset = useCallback((preset: ChatThemePreset) => {
     saveTheme(preset.colors, preset.name)
@@ -147,5 +167,7 @@ export function useChatTheme() {
     setCustomColor,
     bgImage,
     setBgImage,
+    glassOpacity,
+    setGlassOpacity,
   }
 }
