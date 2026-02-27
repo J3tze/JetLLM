@@ -30,15 +30,17 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
   const [loaded, setLoaded] = useState(false)
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
   const [bubbleStyle, setBubbleStyle] = useState<BubbleStyle>("flat")
+  const [webSearch, setWebSearch] = useState(false)
+  const [searchAvailable, setSearchAvailable] = useState(false)
 
   const convIdRef = useRef(conversationId)
   convIdRef.current = conversationId
 
   // Use refs so the transport body always reads latest values
-  const stateRef = useRef({ provider, model, temperature, maxTokens, topP })
+  const stateRef = useRef({ provider, model, temperature, maxTokens, topP, webSearch })
   useEffect(() => {
-    stateRef.current = { provider, model, temperature, maxTokens, topP }
-  }, [provider, model, temperature, maxTokens, topP])
+    stateRef.current = { provider, model, temperature, maxTokens, topP, webSearch }
+  }, [provider, model, temperature, maxTokens, topP, webSearch])
 
   // Load default provider/model from settings
   useEffect(() => {
@@ -53,6 +55,8 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
           setProvider("openai")
           setModel("gpt-4o")
         }
+        const hasFirecrawlKey = !!settings["search:firecrawlKey"]
+        setSearchAvailable(hasFirecrawlKey)
       })
       .catch(() => {
         setProvider("openai")
@@ -151,35 +155,41 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
   const isLoading = status === "streaming" || status === "submitted"
 
   const handleSend = useCallback(async (text: string) => {
-    let activeConvId = convIdRef.current
+    try {
+      let activeConvId = convIdRef.current
 
-    // Auto-create conversation on first message
-    if (!activeConvId) {
-      const res = await fetch("/api/conversations", {
+      // Auto-create conversation on first message
+      if (!activeConvId) {
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: stateRef.current.model,
+            provider: stateRef.current.provider,
+            title: text.slice(0, 50),
+          }),
+        })
+        if (!res.ok) throw new Error("Failed to create conversation")
+        const conv = await res.json()
+        activeConvId = conv.id
+        convIdRef.current = activeConvId
+        // Update prevConvIdRef so the effect doesn't reload messages
+        prevConvIdRef.current = activeConvId
+        onConversationCreated?.(conv.id)
+      }
+
+      // Persist user message to DB
+      const persistRes = await fetch(`/api/conversations/${activeConvId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: stateRef.current.model,
-          provider: stateRef.current.provider,
-          title: text.slice(0, 50),
-        }),
+        body: JSON.stringify({ role: "user", content: text }),
       })
-      const conv = await res.json()
-      activeConvId = conv.id
-      convIdRef.current = activeConvId
-      // Update prevConvIdRef so the effect doesn't reload messages
-      prevConvIdRef.current = activeConvId
-      onConversationCreated?.(conv.id)
+      if (!persistRes.ok) throw new Error("Failed to persist message")
+
+      sendMessage({ text })
+    } catch (error) {
+      console.error("[handleSend] Error:", error)
     }
-
-    // Persist user message to DB
-    await fetch(`/api/conversations/${activeConvId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "user", content: text }),
-    })
-
-    sendMessage({ text })
   }, [sendMessage, onConversationCreated])
 
   const handleProviderChange = (newProvider: string) => {
@@ -212,7 +222,13 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
         />
       </div>
       <MessageList messages={messages} isLoading={isLoading} bubbleStyle={bubbleStyle} />
-      <ChatInput onSend={handleSend} isLoading={isLoading} />
+      <ChatInput
+        onSend={handleSend}
+        isLoading={isLoading}
+        webSearch={webSearch}
+        onWebSearchChange={setWebSearch}
+        searchAvailable={searchAvailable}
+      />
     </div>
   )
 }
