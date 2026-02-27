@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "./chat-message"
 import { ChevronDown } from "lucide-react"
 import { JetLLMLogo } from "@/components/jetllm-logo"
+import { CodeBlock } from "./code-block"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { UIMessage } from "ai"
@@ -79,7 +80,11 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
     .map(p => p.text)
     .join("") ?? ""
 
-  // Listen for manual scroll events on the viewport
+  // Track messages.length in a ref so scroll handler doesn't need re-registration
+  const messagesLenRef = useRef(messages.length)
+  messagesLenRef.current = messages.length
+
+  // Listen for manual scroll events on the viewport (mount once)
   useEffect(() => {
     const viewport = getViewport(scrollAreaRef)
     if (!viewport) return
@@ -87,12 +92,12 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
     const handleScroll = () => {
       const nearBottom = isNearBottom(viewport)
       isUserScrolledUp.current = !nearBottom
-      setShowScrollBtn(!nearBottom && messages.length > 0)
+      setShowScrollBtn(!nearBottom && messagesLenRef.current > 0)
     }
 
     viewport.addEventListener("scroll", handleScroll, { passive: true })
     return () => viewport.removeEventListener("scroll", handleScroll)
-  }, [messages.length])
+  }, [])
 
   // Auto-scroll when content changes (new messages or streaming tokens)
   useEffect(() => {
@@ -147,7 +152,21 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
                   if (part.type === "text") {
                     return (
                       <div key={i} className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:bg-black/30 prose-pre:rounded-lg prose-code:text-[0.85em] prose-code:before:content-none prose-code:after:content-none prose-headings:my-2 prose-a:text-current prose-a:underline">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            pre: ({ children }) => <>{children}</>,
+                            code: ({ className, children, ...props }) => {
+                              const match = className?.match(/language-(\w+)/)
+                              if (match) {
+                                return <CodeBlock language={match[1]} code={String(children).trimEnd()} />
+                              }
+                              return <code className={className} {...props}>{children}</code>
+                            },
+                          }}
+                        >
+                          {part.text}
+                        </ReactMarkdown>
                       </div>
                     )
                   }
