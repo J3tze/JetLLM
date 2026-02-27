@@ -53,16 +53,24 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
           setProvider("openai")
           setModel("gpt-4o")
         }
-        const chatTheme = settings["ui:chatTheme"] as { bubbleStyle?: string } | undefined
-        if (chatTheme?.bubbleStyle) {
-          setBubbleStyle(chatTheme.bubbleStyle as BubbleStyle)
-        }
       })
       .catch(() => {
         setProvider("openai")
         setModel("gpt-4o")
       })
       .finally(() => setDefaultsLoaded(true))
+  }, [])
+
+  // Sync bubbleStyle from DOM attribute (set by useChatTheme hook / ThemeInitializer)
+  useEffect(() => {
+    const readStyle = () => {
+      const style = document.documentElement.dataset.bubbleStyle as BubbleStyle | undefined
+      if (style) setBubbleStyle(style)
+    }
+    readStyle()
+    const observer = new MutationObserver(readStyle)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-bubble-style"] })
+    return () => observer.disconnect()
   }, [])
 
   // Persist provider/model selection as default
