@@ -3,7 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createMistral } from "@ai-sdk/mistral"
 import { getSetting, ProviderConfig } from "@/lib/settings"
-import { LanguageModel } from "ai"
+import { LanguageModel, EmbeddingModel } from "ai"
 
 export { PROVIDER_REGISTRY } from "./registry"
 
@@ -62,5 +62,52 @@ export function getModel(providerId: string, modelId: string): LanguageModel {
     }
     default:
       throw new Error(`Unknown provider: ${providerId}`)
+  }
+}
+
+export function getEmbeddingModel(providerId: string, modelId: string): EmbeddingModel {
+  const config = getSetting<ProviderConfig>(`provider:${providerId}`)
+  if (!config?.apiKey) {
+    throw new Error(`No API key configured for provider: ${providerId}`)
+  }
+
+  switch (providerId) {
+    case "openai": {
+      const provider = createOpenAI({
+        apiKey: config.apiKey,
+        ...(config.baseUrl && { baseURL: config.baseUrl }),
+      })
+      return provider.embedding(modelId)
+    }
+    case "google": {
+      const provider = createGoogleGenerativeAI({
+        apiKey: config.apiKey,
+      })
+      return provider.textEmbeddingModel(modelId)
+    }
+    case "mistral": {
+      const provider = createMistral({
+        apiKey: config.apiKey,
+      })
+      return provider.textEmbeddingModel(modelId)
+    }
+    case "anthropic":
+    case "groq":
+      throw new Error(`Provider ${providerId} does not support embeddings`)
+    case "openrouter":
+    case "together":
+    case "custom": {
+      const baseURL = config.baseUrl || PROVIDER_BASE_URLS[providerId]
+      if (!baseURL) {
+        throw new Error(`Base URL required for provider: ${providerId}`)
+      }
+      const provider = createOpenAI({
+        apiKey: config.apiKey,
+        baseURL,
+      })
+      return provider.embedding(modelId)
+    }
+    default:
+      throw new Error(`Provider ${providerId} does not support embeddings`)
   }
 }
