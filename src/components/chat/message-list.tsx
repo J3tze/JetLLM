@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "./chat-message"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Globe } from "lucide-react"
 import { JetLLMLogo } from "@/components/jetllm-logo"
 import { CodeBlock } from "./code-block"
 import { Button } from "@/components/ui/button"
@@ -169,6 +169,22 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
                         </ReactMarkdown>
                       </div>
                     )
+                  }
+                  if (part.type === "tool-invocation") {
+                    const toolPart = part as { type: "tool-invocation"; toolInvocation: { toolName: string; state: string; args?: Record<string, unknown> } }
+                    if (toolPart.toolInvocation.toolName === "web_search") {
+                      return (
+                        <div key={i} className="mb-1">
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Globe className="h-3 w-3" />
+                            {toolPart.toolInvocation.state === "result"
+                              ? `Searched the web for "${toolPart.toolInvocation.args?.query || ""}"`
+                              : "Searching the web..."}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
                   }
                   return null
                 })}
