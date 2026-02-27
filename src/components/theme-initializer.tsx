@@ -14,6 +14,7 @@ const CHAT_THEME_VARS: Record<string, string> = {
 }
 
 const WALLPAPER_ID = "jetllm-wallpaper"
+const DEFAULT_WALLPAPER = "/default-wallpaper.jpg"
 
 function applyWallpaper(bgColor: string, bgImage?: string) {
   let el = document.getElementById(WALLPAPER_ID)
@@ -73,9 +74,11 @@ export function ThemeInitializer() {
         }
 
         // Apply wallpaper and signal wallpaper mode for CSS (glass sidebar, etc.)
+        // Use default wallpaper on fresh installs (no bgImage saved yet)
         const bgColor = chatTheme?.colors?.chatBg || "#000000"
-        applyWallpaper(bgColor, chatTheme?.bgImage)
-        if (chatTheme?.bgImage) {
+        const bgImage = chatTheme?.bgImage ?? DEFAULT_WALLPAPER
+        applyWallpaper(bgColor, bgImage)
+        if (bgImage) {
           document.documentElement.dataset.wallpaper = ""
         } else {
           delete document.documentElement.dataset.wallpaper
