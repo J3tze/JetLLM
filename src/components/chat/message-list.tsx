@@ -10,6 +10,7 @@ import { JetLLMLogo } from "@/components/jetllm-logo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { UIMessage } from "ai"
+import type { BubbleStyle } from "@/hooks/use-chat-theme"
 
 function ReasoningBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
@@ -60,9 +61,10 @@ function isNearBottom(viewport: HTMLElement, threshold = 80) {
 type MessageListProps = {
   messages: UIMessage[]
   isLoading?: boolean
+  bubbleStyle?: BubbleStyle
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const isUserScrolledUp = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -133,11 +135,11 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         className="flex-1"
         ref={scrollAreaRef}
       >
-        <div className="max-w-3xl mx-auto py-6 space-y-1">
+        <div className="max-w-3xl mx-auto py-6 space-y-2">
           {messages
             .filter(m => m.role === "user" || m.role === "assistant")
             .map((message) => (
-              <ChatMessage key={message.id} role={message.role as "user" | "assistant"}>
+              <ChatMessage key={message.id} role={message.role as "user" | "assistant"} bubbleStyle={bubbleStyle}>
                 {message.parts.map((part, i) => {
                   if (part.type === "reasoning") {
                     return <ReasoningBlock key={i} text={part.text} />
@@ -154,7 +156,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
               </ChatMessage>
             ))}
           {showThinking && (
-            <ChatMessage role="assistant">
+            <ChatMessage role="assistant" bubbleStyle={bubbleStyle}>
               <span className="animate-pulse">Thinking...</span>
             </ChatMessage>
           )}

@@ -9,6 +9,7 @@ import { ChatInput } from "./chat-input"
 import { ModelSelector } from "./model-selector"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
+import type { BubbleStyle } from "@/hooks/use-chat-theme"
 
 type ChatPanelProps = {
   conversationId: string | null
@@ -28,6 +29,7 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
   const [topP, setTopP] = useState(1)
   const [loaded, setLoaded] = useState(false)
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
+  const [bubbleStyle, setBubbleStyle] = useState<BubbleStyle>("flat")
 
   const convIdRef = useRef(conversationId)
   convIdRef.current = conversationId
@@ -50,6 +52,10 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
         } else {
           setProvider("openai")
           setModel("gpt-4o")
+        }
+        const chatTheme = settings["ui:chatTheme"] as { bubbleStyle?: string } | undefined
+        if (chatTheme?.bubbleStyle) {
+          setBubbleStyle(chatTheme.bubbleStyle as BubbleStyle)
         }
       })
       .catch(() => {
@@ -197,7 +203,7 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
           onModelChange={setModel}
         />
       </div>
-      <MessageList messages={messages} isLoading={isLoading} />
+      <MessageList messages={messages} isLoading={isLoading} bubbleStyle={bubbleStyle} />
       <ChatInput onSend={handleSend} isLoading={isLoading} />
     </div>
   )
