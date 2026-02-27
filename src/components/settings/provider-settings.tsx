@@ -24,22 +24,39 @@ export function ProviderSettings() {
   })
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState(false)
+  const [firecrawlKey, setFirecrawlKey] = useState("")
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then(res => res.json())
-      .then((settings: Record<string, unknown>) => {
+    fetch("/api/providers/configs")
+      .then(res => res.ok ? res.json() : {})
+      .then((serverConfigs: Record<string, { hasKey: boolean; baseUrl?: string }>) => {
         setConfigs(prev => {
           const next = { ...prev }
           for (const p of PROVIDER_REGISTRY) {
-            const key = `provider:${p.id}`
-            if (settings[key] && typeof settings[key] === "object") {
-              next[p.id] = settings[key] as ProviderConfig
+            if (serverConfigs[p.id]) {
+              // We only know if a key exists server-side (it's not sent back for security)
+              // Keep the local empty string so user can enter a new key
+              next[p.id] = {
+                apiKey: serverConfigs[p.id].hasKey ? "••••••••" : "",
+                baseUrl: serverConfigs[p.id].baseUrl ?? "",
+              }
             }
           }
           return next
         })
       })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then(res => res.ok ? res.json() : {})
+      .then((settings: Record<string, unknown>) => {
+        if (settings["search:firecrawlKey"]) {
+          setFirecrawlKey("••••••••")
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const updateConfig = (providerId: string, field: keyof ProviderConfig, value: string) => {
@@ -53,18 +70,36 @@ export function ProviderSettings() {
     setSaving(true)
     try {
       const promises = Object.entries(configs)
-        .filter(([, config]) => config.apiKey)
+        // Skip providers where apiKey is the masked placeholder (unchanged)
+        .filter(([, config]) => config.apiKey !== "••••••••")
         .map(([providerId, config]) =>
-          fetch("/api/settings", {
+          fetch("/api/providers/configs", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ key: `provider:${providerId}`, value: config }),
+            body: JSON.stringify({ providerId, config }),
           })
         )
       await Promise.all(promises)
       toast.success("Settings saved")
     } catch {
       toast.error("Failed to save settings")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveFirecrawlKey = async () => {
+    if (firecrawlKey === "••••••••") return
+    setSaving(true)
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "search:firecrawlKey", value: firecrawlKey }),
+      })
+      toast.success("Firecrawl API key saved")
+    } catch {
+      toast.error("Failed to save API key")
     } finally {
       setSaving(false)
     }
@@ -123,6 +158,42 @@ export function ProviderSettings() {
           </Card>
         )
       })}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Web Search</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Firecrawl API Key</Label>
+            <div className="flex gap-2">
+              <Input
+                type={showKeys["firecrawl"] ? "text" : "password"}
+                value={firecrawlKey}
+                onChange={(e) => setFirecrawlKey(e.target.value)}
+                placeholder="fc-..."
+                className="font-mono text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowKeys(prev => ({ ...prev, firecrawl: !prev.firecrawl }))}
+              >
+                {showKeys["firecrawl"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Get your API key at firecrawl.dev. Enables web search in chat.
+            </p>
+          </div>
+          <Button
+            onClick={saveFirecrawlKey}
+            disabled={saving}
+            size="sm"
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </CardContent>
+      </Card>
       <div className="sticky bottom-0 py-4 bg-background">
         <Button className="w-full" onClick={saveAll} disabled={saving}>
           {saving ? "Saving..." : "Save All Settings"}
