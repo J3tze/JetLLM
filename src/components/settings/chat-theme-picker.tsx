@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { USER_BUBBLE_ACCENT, type ChatThemeColors, type ChatThemePreset } from "@/hooks/use-chat-theme"
+import { type BubbleStyle, type ChatFont, CHAT_FONTS, USER_BUBBLE_ACCENT, type ChatThemeColors, type ChatThemePreset } from "@/hooks/use-chat-theme"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,11 +11,12 @@ import { ImagePlus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const COLOR_ROWS: { key: keyof ChatThemeColors; label: string }[] = [
+  { key: "chatBg", label: "Chat Background" },
+  { key: "textColor", label: "Chat Text Color" },
   { key: "userBubble", label: "User Bubble" },
   { key: "userBubbleFg", label: "User Text" },
   { key: "assistantBubble", label: "Assistant Bubble" },
   { key: "assistantBubbleFg", label: "Assistant Text" },
-  { key: "chatBg", label: "Chat Background" },
 ]
 
 function ColorRow({
@@ -78,11 +79,30 @@ type ChatThemeState = {
   setBgImage: (url: string) => void
   glassOpacity: number
   setGlassOpacity: (opacity: number) => void
+  font: string
+  setFont: (fontName: string) => void
+  fonts: readonly ChatFont[]
+  bubbleStyle: BubbleStyle
+  setBubbleStyle: (style: BubbleStyle) => void
 }
 
 export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: string; chatThemeState: ChatThemeState }) {
-  const { colors, presetName, presets, setThemePreset, setCustomColor, bgImage, setBgImage, glassOpacity, setGlassOpacity } = chatThemeState
+  const { colors, presetName, presets, setThemePreset, setCustomColor, bgImage, setBgImage, glassOpacity, setGlassOpacity, font, setFont, fonts, bubbleStyle, setBubbleStyle } = chatThemeState
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    // Preload all external fonts so the font selector shows proper previews
+    CHAT_FONTS.filter(f => !f.builtin).forEach(f => {
+      const linkId = `chat-font-preview-${f.name.replace(/\s+/g, "-").toLowerCase()}`
+      if (!document.getElementById(linkId)) {
+        const link = document.createElement("link")
+        link.id = linkId
+        link.rel = "stylesheet"
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.name)}:wght@400;500&display=swap`
+        document.head.appendChild(link)
+      }
+    })
+  }, [])
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -136,6 +156,49 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
           </div>
         </div>
 
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Bubble Style</Label>
+          <div className="flex flex-wrap gap-2">
+            {(["flat", "minimal", "full"] as const).map(style => (
+              <button
+                key={style}
+                onClick={() => setBubbleStyle(style)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",
+                  bubbleStyle === style
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground"
+                )}
+              >
+                {style === "flat" && "Flat"}
+                {style === "minimal" && "Minimal"}
+                {style === "full" && "Full Bubbles"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Chat Font</Label>
+          <div className="flex flex-wrap gap-2">
+            {fonts.map(f => (
+              <button
+                key={f.name}
+                onClick={() => setFont(f.name)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm transition-all border",
+                  font === f.name
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground"
+                )}
+                style={{ fontFamily: f.family }}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="space-y-2.5 pt-1">
           <Label className="text-xs text-muted-foreground">Colors</Label>
           {COLOR_ROWS.map(({ key, label }) => (
@@ -143,7 +206,15 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
               key={key}
               label={label}
               value={displayColors[key]}
-              hint={key === "userBubble" && colors.userBubble === USER_BUBBLE_ACCENT ? "Follows accent" : undefined}
+              hint={
+                key === "userBubble" && colors.userBubble === USER_BUBBLE_ACCENT
+                  ? "Follows accent"
+                  : key === "userBubbleFg" && colors.userBubbleFg === colors.textColor
+                    ? "Follows global"
+                    : key === "assistantBubbleFg" && colors.assistantBubbleFg === colors.textColor
+                      ? "Follows global"
+                      : undefined
+              }
               onChange={(hex) => setCustomColor(key, hex)}
             />
           ))}
