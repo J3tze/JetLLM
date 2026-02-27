@@ -147,9 +147,11 @@ export function useChatTheme() {
       .then((settings: Record<string, unknown>) => {
         const saved = settings["ui:chatTheme"] as { preset?: string; colors?: ChatThemeColors; bgImage?: string; glassOpacity?: number; font?: string; bubbleStyle?: string } | undefined
         if (saved?.colors) {
-          setColors(saved.colors)
+          // Merge with defaults so old saved themes without new fields still work
+          const merged = { ...CHAT_THEME_PRESETS[0].colors, ...saved.colors }
+          setColors(merged)
           setPresetName(saved.preset ?? null)
-          applyChatTheme(saved.colors)
+          applyChatTheme(merged)
         }
         if (saved?.bgImage) {
           setBgImageState(saved.bgImage)
