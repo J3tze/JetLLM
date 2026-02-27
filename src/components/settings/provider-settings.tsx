@@ -25,6 +25,7 @@ export function ProviderSettings() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState(false)
   const [firecrawlKey, setFirecrawlKey] = useState("")
+  const [tavilyKey, setTavilyKey] = useState("")
 
   useEffect(() => {
     fetch("/api/providers/configs")
@@ -54,6 +55,9 @@ export function ProviderSettings() {
       .then((settings: Record<string, unknown>) => {
         if (settings["search:firecrawlKey"]) {
           setFirecrawlKey("••••••••")
+        }
+        if (settings["search:tavilyKey"]) {
+          setTavilyKey("••••••••")
         }
       })
       .catch(() => {})
@@ -98,6 +102,23 @@ export function ProviderSettings() {
         body: JSON.stringify({ key: "search:firecrawlKey", value: firecrawlKey }),
       })
       toast.success("Firecrawl API key saved")
+    } catch {
+      toast.error("Failed to save API key")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveTavilyKey = async () => {
+    if (tavilyKey === "••••••••") return
+    setSaving(true)
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "search:tavilyKey", value: tavilyKey }),
+      })
+      toast.success("Tavily API key saved")
     } catch {
       toast.error("Failed to save API key")
     } finally {
@@ -187,6 +208,42 @@ export function ProviderSettings() {
           </div>
           <Button
             onClick={saveFirecrawlKey}
+            disabled={saving}
+            size="sm"
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Web Search</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Tavily API Key</Label>
+            <div className="flex gap-2">
+              <Input
+                type={showKeys["tavily"] ? "text" : "password"}
+                value={tavilyKey}
+                onChange={(e) => setTavilyKey(e.target.value)}
+                placeholder="tvly-..."
+                className="font-mono text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowKeys(prev => ({ ...prev, tavily: !prev.tavily }))}
+              >
+                {showKeys["tavily"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Get your free API key at tavily.com. Enables web search in chat (1000 free searches/month).
+            </p>
+          </div>
+          <Button
+            onClick={saveTavilyKey}
             disabled={saving}
             size="sm"
           >
