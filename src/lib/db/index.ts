@@ -8,6 +8,7 @@ import fs from "fs"
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "jetllm.db")
 
 let db: BetterSQLite3Database<typeof schema>
+let rawSqlite: InstanceType<typeof Database>
 
 function ensureTables(sqlite: InstanceType<typeof Database>) {
   sqlite.exec(`
@@ -105,9 +106,17 @@ export function getDb() {
     sqliteVec.load(sqlite)
     ensureTables(sqlite)
 
+    rawSqlite = sqlite
     db = drizzle({ client: sqlite, schema })
   }
   return db
+}
+
+/** Return the raw better-sqlite3 Database instance (for sqlite-vec virtual tables, etc.) */
+export function getRawDb(): InstanceType<typeof Database> {
+  // Ensure initialisation has happened
+  getDb()
+  return rawSqlite
 }
 
 export { schema }
