@@ -74,13 +74,17 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
     );
   `)
 
-  // Create sqlite-vec virtual table for vector search
-  sqlite.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
-      chunk_id TEXT PRIMARY KEY,
-      embedding FLOAT[1536]
-    );
-  `)
+  // Create sqlite-vec virtual table for vector search (only if extension loaded)
+  try {
+    sqlite.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+        chunk_id TEXT PRIMARY KEY,
+        embedding FLOAT[1536]
+      );
+    `)
+  } catch {
+    // sqlite-vec not available — skip vector table creation
+  }
 
   // Migration: add project_id column to conversations for existing databases
   try {
@@ -103,7 +107,12 @@ export function getDb() {
     sqlite.pragma("foreign_keys = ON")
     sqlite.pragma("busy_timeout = 5000")
 
-    sqliteVec.load(sqlite)
+    // Load sqlite-vec extension (graceful — app works without it, just no RAG vector search)
+    try {
+      sqliteVec.load(sqlite)
+    } catch (err) {
+      console.warn("[db] sqlite-vec extension failed to load (RAG will be unavailable):", err)
+    }
     ensureTables(sqlite)
 
     rawSqlite = sqlite
