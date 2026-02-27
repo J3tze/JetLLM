@@ -8,6 +8,7 @@ export type Conversation = {
   model: string
   provider: string
   systemPrompt: string | null
+  projectId: string | null
   createdAt: string
   updatedAt: string
 }

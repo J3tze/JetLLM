@@ -11,9 +11,17 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
 import type { BubbleStyle } from "@/hooks/use-chat-theme"
 
+type ProjectInitMessage = {
+  projectId: string
+  text: string
+}
+
 type ChatPanelProps = {
   conversationId: string | null
   onConversationCreated?: (id: string) => void
+  projectId?: string | null
+  projectInitMessage?: ProjectInitMessage | null
+  onProjectInitConsumed?: () => void
 }
 
 type DefaultModel = {
@@ -21,7 +29,7 @@ type DefaultModel = {
   model: string
 }
 
-export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelProps) {
+export function ChatPanel({ conversationId, onConversationCreated, projectId, projectInitMessage, onProjectInitConsumed }: ChatPanelProps) {
   const [provider, setProvider] = useState("")
   const [model, setModel] = useState("")
   const [temperature, setTemperature] = useState(0.7)
@@ -154,20 +162,29 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
 
   const isLoading = status === "streaming" || status === "submitted"
 
+  // Keep a ref for projectId so handleSend always reads the latest
+  const projectIdRef = useRef(projectId)
+  projectIdRef.current = projectId
+
   const handleSend = useCallback(async (text: string) => {
     try {
       let activeConvId = convIdRef.current
 
       // Auto-create conversation on first message
       if (!activeConvId) {
+        const createBody: Record<string, unknown> = {
+          model: stateRef.current.model,
+          provider: stateRef.current.provider,
+          title: text.slice(0, 50),
+        }
+        // Attach projectId if creating within a project context
+        if (projectIdRef.current) {
+          createBody.projectId = projectIdRef.current
+        }
         const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: stateRef.current.model,
-            provider: stateRef.current.provider,
-            title: text.slice(0, 50),
-          }),
+          body: JSON.stringify(createBody),
         })
         if (!res.ok) throw new Error("Failed to create conversation")
         const conv = await res.json()
@@ -191,6 +208,19 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
       console.error("[handleSend] Error:", error)
     }
   }, [sendMessage, onConversationCreated])
+
+  // Handle project init message (when user starts a conversation from ProjectHome)
+  const projectInitHandled = useRef(false)
+  useEffect(() => {
+    if (projectInitMessage && !projectInitHandled.current && defaultsLoaded) {
+      projectInitHandled.current = true
+      handleSend(projectInitMessage.text)
+      onProjectInitConsumed?.()
+    }
+    if (!projectInitMessage) {
+      projectInitHandled.current = false
+    }
+  }, [projectInitMessage, defaultsLoaded, handleSend, onProjectInitConsumed])
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider)
