@@ -201,8 +201,8 @@ export function ChatPanel({ conversationId, onConversationCreated }: ChatPanelPr
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3 flex items-center gap-2 safe-area-top">
+    <div className="flex flex-col h-full safe-area-top">
+      <div className="px-4 pt-2 pb-3 flex items-center gap-2">
         <SidebarTrigger className="h-8 w-8" />
         <ModelSelector
           provider={provider}
