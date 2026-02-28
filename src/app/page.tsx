@@ -11,8 +11,14 @@ import { useSwipeSidebar } from "@/hooks/use-swipe-sidebar"
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
-  const { conversations, deleteConversation, refresh } = useConversations()
-  const { projects, createProject, deleteProject, updateProject, refresh: refreshProjects } = useProjects()
+  const {
+    conversations,
+    deleteConversation,
+    renameConversation,
+    togglePin: togglePinConversation,
+    refresh,
+  } = useConversations()
+  const { projects, createProject, deleteProject, updateProject } = useProjects()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
 
@@ -26,16 +32,19 @@ export default function Home() {
   const handleNew = useCallback(() => {
     setActiveId(null)
     setActiveProjectId(null)
+    setProjectInitMessage(null)
   }, [])
 
   const handleSelect = useCallback((id: string) => {
     setActiveId(id)
     setActiveProjectId(null)
+    setProjectInitMessage(null)
   }, [])
 
   const handleSelectProject = useCallback((id: string) => {
     setActiveProjectId(id)
     setActiveId(null)
+    setProjectInitMessage(null)
   }, [])
 
   const handleDelete = useCallback(async (id: string) => {
@@ -44,6 +53,10 @@ export default function Home() {
       setActiveId(null)
     }
   }, [activeId, deleteConversation])
+
+  const handleRenameConversation = useCallback(async (id: string, title: string) => {
+    await renameConversation(id, title)
+  }, [renameConversation])
 
   const handleNewProject = useCallback(async () => {
     const project = await createProject()
@@ -62,15 +75,18 @@ export default function Home() {
 
   const handleConversationCreated = useCallback((id: string) => {
     setActiveId(id)
+    setProjectInitMessage(null)
     refresh()
   }, [refresh])
 
   const handleProjectBack = useCallback(() => {
     setActiveProjectId(null)
+    setProjectInitMessage(null)
   }, [])
 
   const handleProjectOpenConversation = useCallback((id: string) => {
     setActiveId(id)
+    setProjectInitMessage(null)
     // Keep activeProjectId so the sidebar shows the project as active
   }, [])
 
@@ -95,13 +111,20 @@ export default function Home() {
     if (data.icon !== undefined && data.icon !== null) updateData.icon = data.icon
     if (data.systemPrompt !== undefined) updateData.systemPrompt = data.systemPrompt
     await updateProject(id, updateData)
-    refreshProjects()
-  }, [updateProject, refreshProjects])
+  }, [updateProject])
 
   const activeProject = useMemo(() => {
     if (!activeProjectId) return null
     return projects.find(p => p.id === activeProjectId) || null
   }, [activeProjectId, projects])
+
+  const handlePinProject = useCallback(async (id: string, currentPin: boolean) => {
+    await updateProject(id, { isPinned: !currentPin })
+  }, [updateProject])
+
+  const handleRenameProject = useCallback(async (id: string, name: string) => {
+    await updateProject(id, { name: name.trim() || "New Project" })
+  }, [updateProject])
 
   // Render nothing on server -- prevents hydration mismatch from browser
   // extensions (e.g. Dark Reader) that modify DOM before React hydrates
@@ -115,7 +138,7 @@ export default function Home() {
   }
 
   // Determine what to render in the main area
-  const showProjectHome = activeProjectId && !activeId && activeProject
+  const showProjectHome = activeProjectId && !activeId && activeProject && !projectInitMessage
 
   return (
     <SidebarProvider>
@@ -130,6 +153,10 @@ export default function Home() {
         onNewProject={handleNewProject}
         onDelete={handleDelete}
         onDeleteProject={handleDeleteProject}
+        onPinProject={handlePinProject}
+        onPinConversation={togglePinConversation}
+        onRenameConversation={handleRenameConversation}
+        onRenameProject={handleRenameProject}
       />
       <SwipeHandler />
       <SidebarInset>
@@ -147,7 +174,6 @@ export default function Home() {
             onConversationCreated={handleConversationCreated}
             projectId={activeProjectId}
             projectInitMessage={projectInitMessage}
-            onProjectInitConsumed={() => setProjectInitMessage(null)}
           />
         )}
       </SidebarInset>

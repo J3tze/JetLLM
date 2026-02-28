@@ -14,8 +14,17 @@ type ProviderConfig = {
   baseUrl?: string
 }
 
+const MASKED_KEY_PLACEHOLDER = "********"
+
 export function ProviderSettings() {
   const [configs, setConfigs] = useState<Record<string, ProviderConfig>>(() => {
+    const initial: Record<string, ProviderConfig> = {}
+    for (const p of PROVIDER_REGISTRY) {
+      initial[p.id] = { apiKey: "" }
+    }
+    return initial
+  })
+  const [initialConfigs, setInitialConfigs] = useState<Record<string, ProviderConfig>>(() => {
     const initial: Record<string, ProviderConfig> = {}
     for (const p of PROVIDER_REGISTRY) {
       initial[p.id] = { apiKey: "" }
@@ -27,36 +36,37 @@ export function ProviderSettings() {
   const [tavilyKey, setTavilyKey] = useState("")
 
   useEffect(() => {
-    fetch("/api/providers/configs")
+    fetch("/api/providers/configs", { cache: "no-store" })
       .then(res => res.ok ? res.json() : {})
       .then((serverConfigs: Record<string, { hasKey: boolean; baseUrl?: string }>) => {
-        setConfigs(prev => {
+        const toFormConfigs = (prev: Record<string, ProviderConfig>) => {
           const next = { ...prev }
           for (const p of PROVIDER_REGISTRY) {
             if (serverConfigs[p.id]) {
-              // We only know if a key exists server-side (it's not sent back for security)
-              // Keep the local empty string so user can enter a new key
+              // We only know if a key exists server-side (it is never sent back).
               next[p.id] = {
-                apiKey: serverConfigs[p.id].hasKey ? "••••••••" : "",
+                apiKey: serverConfigs[p.id].hasKey ? MASKED_KEY_PLACEHOLDER : "",
                 baseUrl: serverConfigs[p.id].baseUrl ?? "",
               }
             }
           }
           return next
-        })
+        }
+        setConfigs(prev => toFormConfigs(prev))
+        setInitialConfigs(prev => toFormConfigs(prev))
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings", { cache: "no-store" })
       .then(res => res.ok ? res.json() : {})
       .then((settings: Record<string, unknown>) => {
         if (settings["search:tavilyKey"]) {
-          setTavilyKey("••••••••")
+          setTavilyKey(MASKED_KEY_PLACEHOLDER)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   const updateConfig = (providerId: string, field: keyof ProviderConfig, value: string) => {
@@ -69,17 +79,58 @@ export function ProviderSettings() {
   const saveAll = async () => {
     setSaving(true)
     try {
-      const promises = Object.entries(configs)
-        // Skip providers where apiKey is the masked placeholder (unchanged)
-        .filter(([, config]) => config.apiKey !== "••••••••")
-        .map(([providerId, config]) =>
-          fetch("/api/providers/configs", {
+      const providerRequests = Object.entries(configs)
+        .map(([providerId, config]) => {
+          const currentApiKey = config.apiKey.trim()
+          const currentBaseUrl = (config.baseUrl ?? "").trim()
+          const previousBaseUrl = (initialConfigs[providerId]?.baseUrl ?? "").trim()
+
+          const hasNewApiKey =
+            currentApiKey !== "" &&
+            currentApiKey !== MASKED_KEY_PLACEHOLDER
+          const baseUrlChanged = currentBaseUrl !== previousBaseUrl
+
+          if (!hasNewApiKey && !baseUrlChanged) {
+            return null
+          }
+
+          const payloadConfig: { apiKey?: string; baseUrl?: string } = {}
+          if (hasNewApiKey) {
+            payloadConfig.apiKey = currentApiKey
+          }
+          payloadConfig.baseUrl = currentBaseUrl
+
+          return fetch("/api/providers/configs", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ providerId, config }),
+            body: JSON.stringify({ providerId, config: payloadConfig }),
+          })
+        })
+        .filter((request): request is Promise<Response> => request !== null)
+
+      const requests: Promise<Response>[] = [...providerRequests]
+
+      if (tavilyKey && tavilyKey !== MASKED_KEY_PLACEHOLDER) {
+        requests.push(
+          fetch("/api/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key: "search:tavilyKey", value: tavilyKey }),
           })
         )
-      await Promise.all(promises)
+      }
+
+      const responses = await Promise.all(requests)
+      if (responses.some(res => !res.ok)) {
+        throw new Error("Failed to save one or more provider settings")
+      }
+      setInitialConfigs(() => {
+        const snapshot: Record<string, ProviderConfig> = {}
+        for (const p of PROVIDER_REGISTRY) {
+          snapshot[p.id] = { ...configs[p.id] }
+        }
+        return snapshot
+      })
       toast.success("Settings saved")
     } catch {
       toast.error("Failed to save settings")
@@ -89,7 +140,7 @@ export function ProviderSettings() {
   }
 
   const saveTavilyKey = async () => {
-    if (tavilyKey === "••••••••") return
+    if (tavilyKey === MASKED_KEY_PLACEHOLDER) return
     setSaving(true)
     try {
       await fetch("/api/settings", {
@@ -167,7 +218,7 @@ export function ProviderSettings() {
             <Label className="text-sm">Tavily API Key</Label>
             <div className="flex gap-2">
               <Input
-                type={showKeys["tavily"] ? "text" : "password"}
+                type={showKeys.tavily ? "text" : "password"}
                 value={tavilyKey}
                 onChange={(e) => setTavilyKey(e.target.value)}
                 placeholder="tvly-..."
@@ -178,11 +229,11 @@ export function ProviderSettings() {
                 size="icon"
                 onClick={() => setShowKeys(prev => ({ ...prev, tavily: !prev.tavily }))}
               >
-                {showKeys["tavily"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showKeys.tavily ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Get your free API key at tavily.com. Enables web search in chat (1000 free searches/month).
+              Get your free API key at tavily.com. Enables web search in chat.
             </p>
           </div>
           <Button

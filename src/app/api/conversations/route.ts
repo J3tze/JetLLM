@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { listConversations, createConversation } from "@/lib/conversations"
 import { getProjectConversations, getStandaloneConversations } from "@/lib/projects"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)

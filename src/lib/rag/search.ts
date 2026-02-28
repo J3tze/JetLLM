@@ -20,6 +20,9 @@ export async function searchDocuments(
   query: string,
   topK = 5
 ): Promise<SearchResult[]> {
+  const safeTopK = Number.isFinite(topK)
+    ? Math.max(1, Math.min(20, Math.trunc(topK)))
+    : 5
   const queryEmbedding = await embedSingle(query)
   const sqlite = getRawDb()
 
@@ -33,11 +36,11 @@ export async function searchDocuments(
       WHERE d.project_id = ?
         AND d.status = 'ready'
         AND vc.embedding MATCH ?
+        AND k = ?
       ORDER BY vc.distance
-      LIMIT ?
       `
     )
-    .all(projectId, new Float32Array(queryEmbedding), topK)
+    .all(projectId, new Float32Array(queryEmbedding), safeTopK)
 
   return results as SearchResult[]
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { getConversation, updateConversation, deleteConversation } from "@/lib/conversations"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -27,9 +29,9 @@ export async function PATCH(
   }
 
   const body = await request.json()
-  const { title, model, provider, systemPrompt } = body
+  const { title, model, provider, systemPrompt, isPinned } = body
 
-  updateConversation(id, { title, model, provider, systemPrompt })
+  updateConversation(id, { title, model, provider, systemPrompt, isPinned })
   const updated = getConversation(id)
   return NextResponse.json(updated)
 }

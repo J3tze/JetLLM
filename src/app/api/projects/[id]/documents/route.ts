@@ -5,6 +5,9 @@ import { getDb } from "@/lib/db"
 import * as schema from "@/lib/db/schema"
 import { getProject } from "@/lib/projects"
 import { processDocument } from "@/lib/rag/process"
+import { getSetting, type ProviderConfig } from "@/lib/settings"
+
+export const dynamic = "force-dynamic"
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 
@@ -17,6 +20,11 @@ const ALLOWED_EXTENSIONS = new Set([
 function getExtension(filename: string): string {
   const parts = filename.split(".")
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ""
+}
+
+type RagModelConfig = {
+  provider: string
+  model: string
 }
 
 export async function GET(
@@ -59,6 +67,23 @@ export async function POST(
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
+    // RAG requires an embedding model and provider key to index files.
+    const ragModel = getSetting<RagModelConfig>("rag:model")
+    if (!ragModel?.provider || !ragModel?.model) {
+      return NextResponse.json(
+        { error: "Configure a Knowledge Base embedding model in Settings before uploading files." },
+        { status: 400 }
+      )
+    }
+
+    const ragProvider = getSetting<ProviderConfig>(`provider:${ragModel.provider}`)
+    if (!ragProvider?.apiKey) {
+      return NextResponse.json(
+        { error: `Provider "${ragModel.provider}" is selected for Knowledge Base but has no API key configured.` },
+        { status: 400 }
+      )
     }
 
     const formData = await request.formData()

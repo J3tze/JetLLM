@@ -29,12 +29,92 @@ type DefaultModel = {
   model: string
 }
 
+type ProviderConfigSummary = Record<string, { hasKey: boolean; baseUrl?: string }>
+type ConversationLoadAction = "clear" | "skip" | "load"
+
+const DEFAULT_TEMPERATURE = 0.7
+const DEFAULT_MAX_TOKENS = 4096
+const DEFAULT_TOP_P = 1
+
+export function getConversationLoadAction(
+  previousConversationId: string | null | undefined,
+  nextConversationId: string | null
+): ConversationLoadAction {
+  if (!nextConversationId) {
+    return previousConversationId !== nextConversationId ? "clear" : "skip"
+  }
+
+  if (previousConversationId === nextConversationId) {
+    return "skip"
+  }
+
+  return "load"
+}
+
+export function shouldReloadCurrentConversation(
+  action: ConversationLoadAction,
+  conversationId: string | null,
+  currentMessageCount: number
+): boolean {
+  return action === "skip" && !!conversationId && currentMessageCount === 0
+}
+
+export function resolveInitialModelSelection(
+  defaults: DefaultModel | undefined,
+  providerConfigs: ProviderConfigSummary | null
+): DefaultModel {
+  const fallback: DefaultModel = {
+    provider: "openai",
+    model: "gpt-4o",
+  }
+
+  const candidate = (defaults?.provider && defaults?.model)
+    ? defaults
+    : fallback
+
+  if (!providerConfigs) return candidate
+
+  if (providerConfigs[candidate.provider]?.hasKey) {
+    return candidate
+  }
+
+  const firstConfiguredProvider = PROVIDER_REGISTRY.find(p => providerConfigs[p.id]?.hasKey)
+  if (!firstConfiguredProvider) {
+    return candidate
+  }
+
+  const fallbackModel = firstConfiguredProvider.defaultModels[0] ?? candidate.model
+  return {
+    provider: firstConfiguredProvider.id,
+    model: fallbackModel,
+  }
+}
+
+function parseStoredParts(content: string, metadata: string | null | undefined): UIMessage["parts"] {
+  if (!metadata) {
+    return [{ type: "text" as const, text: content }]
+  }
+
+  try {
+    const parsed = JSON.parse(metadata) as { parts?: unknown }
+    if (Array.isArray(parsed.parts)) {
+      const validParts = parsed.parts.filter((part): part is UIMessage["parts"][number] => {
+        return typeof part === "object" && part !== null && typeof (part as { type?: unknown }).type === "string"
+      })
+      if (validParts.length > 0) {
+        return validParts
+      }
+    }
+  } catch {
+    // Fall back to text-only parts when metadata is malformed.
+  }
+
+  return [{ type: "text" as const, text: content }]
+}
+
 export function ChatPanel({ conversationId, onConversationCreated, projectId, projectInitMessage, onProjectInitConsumed }: ChatPanelProps) {
   const [provider, setProvider] = useState("")
   const [model, setModel] = useState("")
-  const [temperature, setTemperature] = useState(0.7)
-  const [maxTokens, setMaxTokens] = useState(4096)
-  const [topP, setTopP] = useState(1)
   const [loaded, setLoaded] = useState(false)
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
   const [bubbleStyle, setBubbleStyle] = useState<BubbleStyle>("flat")
@@ -45,32 +125,53 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   convIdRef.current = conversationId
 
   // Use refs so the transport body always reads latest values
-  const stateRef = useRef({ provider, model, temperature, maxTokens, topP, webSearch })
+  const stateRef = useRef({
+    provider,
+    model,
+    temperature: DEFAULT_TEMPERATURE,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    topP: DEFAULT_TOP_P,
+    webSearch,
+  })
   useEffect(() => {
-    stateRef.current = { provider, model, temperature, maxTokens, topP, webSearch }
-  }, [provider, model, temperature, maxTokens, topP, webSearch])
+    stateRef.current = {
+      provider,
+      model,
+      temperature: DEFAULT_TEMPERATURE,
+      maxTokens: DEFAULT_MAX_TOKENS,
+      topP: DEFAULT_TOP_P,
+      webSearch,
+    }
+  }, [provider, model, webSearch])
 
   // Load default provider/model from settings
   useEffect(() => {
-    fetch("/api/settings")
-      .then(res => res.ok ? res.json() : {})
-      .then((settings: Record<string, unknown>) => {
-        const defaults = settings["default-model"] as DefaultModel | undefined
-        if (defaults?.provider && defaults?.model) {
-          setProvider(defaults.provider)
-          setModel(defaults.model)
-        } else {
-          setProvider("openai")
-          setModel("gpt-4o")
-        }
-        const hasTavilyKey = !!settings["search:tavilyKey"]
+    const controller = new AbortController()
+
+    Promise.all([
+      fetch("/api/settings?keys=default-model,search:tavilyKey", { cache: "no-store", signal: controller.signal })
+        .then(res => res.ok ? res.json() : {}),
+      fetch("/api/providers/configs", { cache: "no-store", signal: controller.signal })
+        .then(res => res.ok ? res.json() : null),
+    ])
+      .then(([settings, providerConfigs]) => {
+        const defaults = (settings as Record<string, unknown>)["default-model"] as DefaultModel | undefined
+        const resolved = resolveInitialModelSelection(defaults, providerConfigs as ProviderConfigSummary | null)
+        setProvider(resolved.provider)
+        setModel(resolved.model)
+        const hasTavilyKey = !!(settings as Record<string, unknown>)["search:tavilyKey"]
         setSearchAvailable(hasTavilyKey)
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") {
+          return
+        }
         setProvider("openai")
         setModel("gpt-4o")
       })
       .finally(() => setDefaultsLoaded(true))
+
+    return () => controller.abort()
   }, [])
 
   // Sync bubbleStyle from DOM attribute (set by useChatTheme hook / ThemeInitializer)
@@ -95,8 +196,10 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "default-model", value: { provider, model } }),
-      }).catch(() => {})
+      }).catch(() => { })
     }, 500)
+
+    return () => clearTimeout(saveDefaultRef.current)
   }, [provider, model, defaultsLoaded])
 
   // Memoize transport so useChat doesn't lose state across renders
@@ -108,7 +211,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
     }),
   }), [])
 
-  const { messages, sendMessage, setMessages, status } = useChat({
+  const { messages, sendMessage, regenerate, setMessages, status } = useChat({
     transport,
     onError: (error) => {
       console.error("[useChat] Error:", error)
@@ -118,14 +221,12 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   // Load messages when conversation changes (including switching between conversations)
   const prevConvIdRef = useRef<string | null | undefined>(undefined)
   useEffect(() => {
-    // Skip on initial render before we know the conversation ID
-    if (prevConvIdRef.current === undefined) {
-      prevConvIdRef.current = conversationId
-    }
+    const previousConversationId = prevConvIdRef.current
+    const action = getConversationLoadAction(previousConversationId, conversationId)
+    const shouldReloadCurrent = shouldReloadCurrentConversation(action, conversationId, messages.length)
 
-    if (!conversationId) {
-      // New chat — clear messages
-      if (prevConvIdRef.current !== conversationId) {
+    if (action === "clear") {
+      if (previousConversationId !== conversationId) {
         setMessages([])
       }
       prevConvIdRef.current = conversationId
@@ -133,32 +234,43 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       return
     }
 
-    // Same conversation (e.g. after creation) — don't reload
-    if (prevConvIdRef.current === conversationId) {
+    if (action === "skip" && !shouldReloadCurrent) {
+      prevConvIdRef.current = conversationId
       setLoaded(true)
       return
     }
 
-    // Switching to a different existing conversation — load from DB
+    // First mount with an existing conversation, switch between conversations,
+    // or rehydrate if the current conversation unexpectedly lost local messages.
     prevConvIdRef.current = conversationId
     setLoaded(false)
-    fetch(`/api/conversations/${conversationId}/messages`)
-      .then(res => res.json())
-      .then((dbMessages: Array<{ id: string; role: string; content: string }>) => {
+    const controller = new AbortController()
+    fetch(`/api/conversations/${conversationId}/messages`, { cache: "no-store", signal: controller.signal })
+      .then(res => res.ok ? res.json() : Promise.reject(new Error("Failed to load messages")))
+      .then((dbMessages: Array<{ id: string; role: string; content: string; metadata?: string | null }>) => {
         const uiMessages: UIMessage[] = dbMessages.map(m => ({
           id: m.id,
           role: m.role as UIMessage["role"],
           content: m.content,
-          parts: [{ type: "text" as const, text: m.content }],
+          parts: parseStoredParts(m.content, m.metadata),
         }))
         setMessages(uiMessages)
         setLoaded(true)
       })
-      .catch(() => {
-        setMessages([])
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") {
+          return
+        }
+        console.error("[chat-panel] Failed to load conversation messages:", error)
+        if (action === "load") {
+          // We intentionally avoid clearing on same-conversation rehydrate failures
+          // to prevent transient fetch errors from wiping visible history.
+          setMessages([])
+        }
         setLoaded(true)
       })
-  }, [conversationId, setMessages])
+    return () => controller.abort()
+  }, [conversationId, messages.length, setMessages])
 
   const isLoading = status === "streaming" || status === "submitted"
 
@@ -203,11 +315,20 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       })
       if (!persistRes.ok) throw new Error("Failed to persist message")
 
-      sendMessage({ text })
+      await sendMessage({ text })
     } catch (error) {
       console.error("[handleSend] Error:", error)
     }
   }, [sendMessage, onConversationCreated])
+
+  const handleRetry = useCallback(() => {
+    if (isLoading) {
+      return
+    }
+    regenerate().catch((error) => {
+      console.error("[handleRetry] Error:", error)
+    })
+  }, [regenerate, isLoading])
 
   // Handle project init message (when user starts a conversation from ProjectHome)
   const projectInitHandled = useRef(false)
@@ -251,7 +372,12 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
           onModelChange={setModel}
         />
       </div>
-      <MessageList messages={messages} isLoading={isLoading} bubbleStyle={bubbleStyle} />
+      <MessageList
+        messages={messages}
+        isLoading={isLoading}
+        bubbleStyle={bubbleStyle}
+        onRetry={handleRetry}
+      />
       <ChatInput
         onSend={handleSend}
         isLoading={isLoading}
@@ -262,3 +388,4 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
     </div>
   )
 }
+

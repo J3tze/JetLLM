@@ -1,13 +1,31 @@
 import { NextResponse } from "next/server"
 import { setSetting, getAllSettings } from "@/lib/settings"
 
-export async function GET() {
+export const dynamic = "force-dynamic"
+
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const keysParam = searchParams.get("keys")
+    const requestedKeys = keysParam
+      ? new Set(
+        keysParam
+          .split(",")
+          .map(k => k.trim())
+          .filter(Boolean)
+      )
+      : null
+
     const settings = getAllSettings()
-    // Filter out provider API keys from public GET response
+    // Filter out provider API keys and avoid returning raw search secrets.
     const publicSettings: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(settings)) {
+      if (requestedKeys && !requestedKeys.has(key)) continue
       if (key.startsWith("provider:")) continue
+      if (key === "search:tavilyKey") {
+        publicSettings[key] = Boolean(value)
+        continue
+      }
       publicSettings[key] = value
     }
     return NextResponse.json(publicSettings)

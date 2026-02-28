@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ArrowLeft, Settings, Paperclip, X, Loader2, MessageSquare, SendHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -47,13 +46,14 @@ export function ProjectHome({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inputValue, setInputValue] = useState("")
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Fetch documents for this project
   const fetchDocuments = useCallback(async () => {
     try {
-      const res = await fetch(`/api/projects/${project.id}/documents`)
+      const res = await fetch(`/api/projects/${project.id}/documents`, { cache: "no-store" })
       if (res.ok) {
         setDocuments(await res.json())
       }
@@ -65,7 +65,7 @@ export function ProjectHome({
   // Fetch conversations for this project
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch(`/api/conversations?projectId=${project.id}`)
+      const res = await fetch(`/api/conversations?projectId=${project.id}`, { cache: "no-store" })
       if (res.ok) {
         setConversations(await res.json())
       }
@@ -91,6 +91,7 @@ export function ProjectHome({
     const file = e.target.files?.[0]
     if (!file) return
 
+    setUploadError(null)
     setUploading(true)
     try {
       const formData = new FormData()
@@ -101,9 +102,12 @@ export function ProjectHome({
       })
       if (res.ok) {
         await fetchDocuments()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setUploadError(typeof err.error === "string" ? err.error : "Failed to upload file")
       }
     } catch {
-      // ignore
+      setUploadError("Failed to upload file")
     } finally {
       setUploading(false)
       // Reset file input
@@ -146,6 +150,8 @@ export function ProjectHome({
     target.style.height = "auto"
     target.style.height = `${target.scrollHeight}px`
   }
+
+  const hasErroredDocuments = documents.some(d => d.status === "error")
 
   return (
     <div className="flex flex-col h-full safe-area-top">
@@ -231,12 +237,17 @@ export function ProjectHome({
                   >
                     <span className="text-xs">{"\u{1F4C4}"}</span>
                     <span className="truncate max-w-[160px]">{doc.name}</span>
-                    {doc.status === "processing" || doc.status === "pending" ? (
+                    {(doc.status === "processing" || doc.status === "pending") && (
                       <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />
-                    ) : (
+                    )}
+                    {doc.status === "error" && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-destructive/90">failed</span>
+                    )}
+                    {(doc.status === "ready" || doc.status === "error") && (
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
                         className="flex items-center justify-center h-4 w-4 rounded text-muted-foreground hover:text-foreground transition-colors ml-1"
+                        title="Remove file"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -248,6 +259,14 @@ export function ProjectHome({
               <p className="text-xs text-muted-foreground/60">
                 No files uploaded. Add files for RAG context in conversations.
               </p>
+            )}
+            {hasErroredDocuments && (
+              <p className="text-xs text-amber-400/90">
+                Some files failed indexing. Configure Knowledge Base settings, then remove and re-add the file.
+              </p>
+            )}
+            {uploadError && (
+              <p className="text-xs text-destructive/90">{uploadError}</p>
             )}
           </div>
 

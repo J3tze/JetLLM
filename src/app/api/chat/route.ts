@@ -1,11 +1,11 @@
 import { streamText, UIMessage, convertToModelMessages, tool } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/providers"
-import { addMessage, getConversation } from "@/lib/conversations"
+import { addMessage, deleteLatestAssistantMessage, getConversation } from "@/lib/conversations"
 import { getFormattedMemories } from "@/lib/memory"
 import { getSetting } from "@/lib/settings"
 import { extractMemories } from "@/lib/memory/extract"
-import { searchWeb, formatSearchResults } from "@/lib/search/tavily"
+import { searchWeb, formatSearchResults, formatSearchToolSummary } from "@/lib/search/tavily"
 import { getProject } from "@/lib/projects"
 import { searchDocuments, formatRagContext } from "@/lib/rag/search"
 import { autoTitleConversation } from "@/lib/conversations/auto-title"
@@ -18,8 +18,60 @@ const THINKING_MODEL_PATTERNS = [
   /^claude-opus-4/,
 ]
 
+type PersistedMessagePart = {
+  type: string
+  [key: string]: unknown
+}
+
 function isThinkingModel(modelId: string): boolean {
   return THINKING_MODEL_PATTERNS.some(p => p.test(modelId))
+}
+
+function getMessageText(message: UIMessage): string {
+  const partText = (message.parts ?? [])
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map(part => part.text)
+    .join("")
+
+  if (partText) return partText
+
+  const legacyContent = (message as { content?: unknown }).content
+  return typeof legacyContent === "string" ? legacyContent : ""
+}
+
+function buildAssistantParts(options: {
+  text: string
+  toolResults: Array<{
+    type?: string
+    toolName?: string
+    toolCallId?: string
+    input?: unknown
+    output?: unknown
+    preliminary?: boolean
+    providerExecuted?: boolean
+  }>
+}): PersistedMessagePart[] {
+  const parts: PersistedMessagePart[] = []
+
+  for (const result of options.toolResults) {
+    if (result.type !== "tool-result" || !result.toolName || !result.toolCallId) continue
+
+    parts.push({
+      type: `tool-${result.toolName}`,
+      toolCallId: result.toolCallId,
+      state: "output-available",
+      input: result.input,
+      output: result.output,
+      ...(typeof result.preliminary === "boolean" ? { preliminary: result.preliminary } : {}),
+      ...(typeof result.providerExecuted === "boolean" ? { providerExecuted: result.providerExecuted } : {}),
+    })
+  }
+
+  if (options.text) {
+    parts.push({ type: "text", text: options.text })
+  }
+
+  return parts
 }
 
 export async function POST(req: Request) {
@@ -34,6 +86,7 @@ export async function POST(req: Request) {
       maxTokens: maxOutputTokens,
       topP,
       webSearch,
+      trigger,
     } = body as {
       messages: UIMessage[]
       conversationId?: string
@@ -43,6 +96,7 @@ export async function POST(req: Request) {
       maxTokens?: number
       topP?: number
       webSearch?: boolean
+      trigger?: string
     }
 
     if (!provider) {
@@ -59,14 +113,30 @@ export async function POST(req: Request) {
       })
     }
 
+    // Regenerate requests replace the most recent assistant reply.
+    // Remove it first so history stays linear in the DB.
+    if (trigger === "regenerate-message" && conversationId) {
+      deleteLatestAssistantMessage(conversationId)
+    }
+
+    const conversation = conversationId ? getConversation(conversationId) : undefined
+    const userMessages = messages.filter(m => m.role === "user")
+    const lastUserMessage = userMessages[userMessages.length - 1]
+    const lastUserText = lastUserMessage ? getMessageText(lastUserMessage) : ""
+    const firstUserText = userMessages[0] ? getMessageText(userMessages[0]) : ""
+    const isFirstAssistantTurn = userMessages.length > 0 && messages.every(m => m.role !== "assistant")
+    const modelMessages = messages.map(m => ({
+      ...m,
+      parts: (m.parts && m.parts.length > 0)
+        ? m.parts
+        : [{ type: "text" as const, text: getMessageText(m) }],
+    }))
+
     // Build system prompt: custom setting > conversation-level > default
     const customSystemPrompt = getSetting<string>("chat:systemPrompt")
     let systemPrompt = customSystemPrompt || "You are a helpful AI assistant."
-    if (conversationId) {
-      const conversation = getConversation(conversationId)
-      if (conversation?.systemPrompt) {
-        systemPrompt = conversation.systemPrompt
-      }
+    if (conversation?.systemPrompt) {
+      systemPrompt = conversation.systemPrompt
     }
 
     // Inject user name if configured
@@ -85,53 +155,47 @@ export async function POST(req: Request) {
     }
 
     // Inject project context and RAG document search
-    if (conversationId) {
-      const conv = getConversation(conversationId)
-      if (conv?.projectId) {
-        const project = getProject(conv.projectId)
-        // Inject project system prompt
-        if (project?.systemPrompt) {
-          systemPrompt = systemPrompt + "\n\n" + project.systemPrompt
-        }
-        // RAG: search project documents for relevant context
-        const ragModel = getSetting<{ provider: string; model: string }>("rag:model")
-        if (ragModel?.provider && ragModel?.model) {
-          try {
-            const lastUserMsg = messages.filter(m => m.role === "user").pop()
-            const query = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : ""
-            if (query) {
-              const results = await searchDocuments(conv.projectId, query)
-              const ragContext = formatRagContext(results)
-              if (ragContext) {
-                systemPrompt = systemPrompt + "\n\n" + ragContext
-              }
+    if (conversation?.projectId) {
+      const project = getProject(conversation.projectId)
+      // Inject project system prompt
+      if (project?.systemPrompt) {
+        systemPrompt = systemPrompt + "\n\n" + project.systemPrompt
+      }
+      // RAG: search project documents for relevant context
+      const ragModel = getSetting<{ provider: string; model: string }>("rag:model")
+      if (ragModel?.provider && ragModel?.model) {
+        try {
+          if (lastUserText) {
+            const results = await searchDocuments(conversation.projectId, lastUserText)
+            const ragContext = formatRagContext(results)
+            if (ragContext) {
+              systemPrompt = systemPrompt + "\n\n" + ragContext
             }
-          } catch (err) {
-            console.error("[chat] RAG search error:", err)
           }
+        } catch (err) {
+          console.error("[chat] RAG search error:", err)
         }
       }
     }
 
     // Web search: check if API key is configured
     const tavilyKey = getSetting<string>("search:tavilyKey")
+    if (tavilyKey) {
+      systemPrompt = systemPrompt + "\n\nWhen web-search evidence is available, respond with a concise summary in bullet points followed by a References section that uses numbered citations like [1], [2]. Paraphrase findings and avoid copying snippets verbatim."
+    }
 
     // Always-search mode: pre-fetch results into system prompt
-    if (webSearch && tavilyKey) {
-      const lastUserMessage = messages.filter(m => m.role === "user").pop()
-      if (lastUserMessage) {
-        const query = typeof lastUserMessage.content === "string"
-          ? lastUserMessage.content
-          : ""
-        try {
-          const results = await searchWeb(query.slice(0, 200))
-          const searchContext = formatSearchResults(results)
-          if (searchContext) {
-            systemPrompt = systemPrompt + "\n\n" + searchContext
-          }
-        } catch (err) {
-          console.error("[chat] Web search pre-fetch error:", err)
+    if (webSearch && tavilyKey && lastUserText) {
+      try {
+        const results = await searchWeb(lastUserText.slice(0, 200))
+        const searchContext = formatSearchResults(results)
+        if (searchContext) {
+          systemPrompt = systemPrompt + "\n\n" + searchContext
         }
+      } catch (err) {
+        console.error("[chat] Web search pre-fetch error:", err)
+        const errMsg = err instanceof Error ? err.message : "Unknown error"
+        systemPrompt = systemPrompt + `\n\n## Web Search Failed\nThe user had web search enabled but the search failed with error: "${errMsg}". Let the user know the search didn't work and suggest they check their Tavily API key in Settings if the error is authentication-related.`
       }
     }
 
@@ -142,19 +206,19 @@ export async function POST(req: Request) {
     const result = streamText({
       model: llmModel,
       system: systemPrompt,
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(modelMessages),
       // Web search tool (only when API key configured)
       ...(tavilyKey ? {
         tools: {
           web_search: tool({
             description: "Search the web for current information. Use when the user asks about recent events, needs up-to-date data, or when your training data may be outdated.",
-            parameters: z.object({
+            inputSchema: z.object({
               query: z.string().describe("The search query"),
             }),
-            execute: async ({ query }) => {
+            execute: async ({ query }: { query: string }) => {
               try {
                 const results = await searchWeb(query)
-                return results.map(r => `### ${r.title}\n${r.url}\n${r.content}`).join("\n\n")
+                return formatSearchToolSummary(results)
               } catch (err) {
                 return `Search failed: ${err instanceof Error ? err.message : "Unknown error"}`
               }
@@ -167,10 +231,10 @@ export async function POST(req: Request) {
       ...(thinking
         ? { maxOutputTokens: maxOutputTokens ?? 16384 }
         : {
-            temperature: temperature ?? 0.7,
-            maxOutputTokens: maxOutputTokens ?? 4096,
-            topP: topP ?? 1,
-          }),
+          temperature: temperature ?? 0.7,
+          maxOutputTokens: maxOutputTokens ?? 4096,
+          topP: topP ?? 1,
+        }),
       // Enable thinking for direct Anthropic provider
       ...(thinking && {
         providerOptions: {
@@ -179,22 +243,35 @@ export async function POST(req: Request) {
           },
         },
       }),
-      onFinish: async ({ text }) => {
-        if (conversationId && text) {
+      onFinish: async (event) => {
+        const text = event.text ?? ""
+        const toolResults = Array.isArray(event.toolResults)
+          ? event.toolResults as Array<{
+            type?: string
+            toolName?: string
+            toolCallId?: string
+            input?: unknown
+            output?: unknown
+            preliminary?: boolean
+            providerExecuted?: boolean
+          }>
+          : []
+
+        if (conversationId && (text || toolResults.length > 0)) {
+          const persistedParts = buildAssistantParts({ text, toolResults })
+
           addMessage({
             conversationId,
             role: "assistant",
             content: text,
+            metadata: JSON.stringify({ parts: persistedParts }),
           })
           // Fire-and-forget memory extraction
           extractMemories(conversationId).catch((err) => {
             console.error("[memory] Background extraction error:", err)
           })
           // Auto-title on first assistant response
-          const userMsgs = messages.filter(m => m.role === "user")
-          const assistantMsgs = messages.filter(m => m.role === "assistant")
-          if (userMsgs.length > 0 && assistantMsgs.length === 0) {
-            const firstUserText = typeof userMsgs[0].content === "string" ? userMsgs[0].content : ""
+          if (isFirstAssistantTurn && text) {
             autoTitleConversation(conversationId, firstUserText, text).catch((err) => {
               console.error("[auto-title] Background error:", err)
             })
@@ -205,9 +282,20 @@ export async function POST(req: Request) {
 
     return result.toUIMessageStreamResponse({ sendReasoning: true })
   } catch (error) {
+    if (error instanceof Error && /^No API key configured for provider: /.test(error.message)) {
+      return new Response(
+        JSON.stringify({
+          error: error.message,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      )
+    }
     console.error("[chat] Error:", error)
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+        stack: error instanceof Error ? error.stack : undefined
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     )
   }

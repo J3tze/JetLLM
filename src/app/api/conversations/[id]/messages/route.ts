@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server"
 import { addMessage, getConversation, getMessages } from "@/lib/conversations"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const conversation = getConversation(id)
+  const messages = getMessages(id)
+  if (messages.length > 0) {
+    return NextResponse.json(messages)
+  }
 
+  const conversation = getConversation(id)
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
   }
 
-  const messages = getMessages(id)
   return NextResponse.json(messages)
 }
 

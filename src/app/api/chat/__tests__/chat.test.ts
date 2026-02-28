@@ -9,17 +9,26 @@ vi.mock("@/lib/providers", () => ({
 // Mock the conversations module
 const mockGetConversation = vi.fn()
 const mockAddMessage = vi.fn()
+const mockDeleteLatestAssistantMessage = vi.fn()
 vi.mock("@/lib/conversations", () => ({
   getConversation: (...args: unknown[]) => mockGetConversation(...args),
   addMessage: (...args: unknown[]) => mockAddMessage(...args),
+  deleteLatestAssistantMessage: (...args: unknown[]) => mockDeleteLatestAssistantMessage(...args),
 }))
 
 // Mock the ai module's streamText and convertToModelMessages
 const mockStreamText = vi.fn()
 const mockConvertToModelMessages = vi.fn()
+const mockTool = vi.fn((definition: unknown) => definition)
 vi.mock("ai", () => ({
   streamText: (...args: unknown[]) => mockStreamText(...args),
   convertToModelMessages: (...args: unknown[]) => mockConvertToModelMessages(...args),
+  tool: (definition: unknown) => mockTool(definition),
+}))
+
+const mockExtractMemories = vi.fn()
+vi.mock("@/lib/memory/extract", () => ({
+  extractMemories: (...args: unknown[]) => mockExtractMemories(...args),
 }))
 
 describe("POST /api/chat", () => {
@@ -32,9 +41,12 @@ describe("POST /api/chat", () => {
     mockGetModel.mockReturnValue(mockModel)
     mockGetConversation.mockReturnValue(undefined)
     mockAddMessage.mockReturnValue(undefined)
+    mockDeleteLatestAssistantMessage.mockReturnValue(undefined)
     mockConvertToModelMessages.mockResolvedValue([
       { role: "user", content: "Hello" },
     ])
+    mockTool.mockImplementation((definition: unknown) => definition)
+    mockExtractMemories.mockResolvedValue(undefined)
     mockStreamText.mockReturnValue({
       toUIMessageStreamResponse: () =>
         new Response("streaming response", { status: 200 }),
@@ -113,7 +125,7 @@ describe("POST /api/chat", () => {
     expect(mockGetConversation).toHaveBeenCalledWith("conv-123")
     expect(mockStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
-        system: "You are a pirate assistant. Speak like a pirate.",
+        system: expect.stringContaining("You are a pirate assistant. Speak like a pirate."),
       })
     )
   })
@@ -131,7 +143,7 @@ describe("POST /api/chat", () => {
 
     expect(mockStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
-        system: "You are a helpful AI assistant.",
+        system: expect.stringContaining("You are a helpful AI assistant."),
       })
     )
   })
@@ -168,5 +180,99 @@ describe("POST /api/chat", () => {
 
     const text = await response.text()
     expect(text).toBe("streaming response")
+  })
+
+  it("deletes the latest assistant message on regenerate requests", async () => {
+    const { POST } = await import("../route")
+
+    const req = createRequest({
+      messages: [{ role: "user", content: "Hello" }],
+      provider: "openai",
+      model: "gpt-4o",
+      conversationId: "conv-123",
+      trigger: "regenerate-message",
+    })
+
+    await POST(req)
+
+    expect(mockDeleteLatestAssistantMessage).toHaveBeenCalledWith("conv-123")
+  })
+
+  it("returns 400 when provider API key is missing", async () => {
+    const { POST } = await import("../route")
+    mockGetModel.mockImplementation(() => {
+      throw new Error("No API key configured for provider: openai")
+    })
+
+    const req = createRequest({
+      messages: [{ role: "user", content: "Hello" }],
+      provider: "openai",
+      model: "gpt-4o",
+    })
+
+    const response = await POST(req)
+    expect(response.status).toBe(400)
+    const json = await response.json()
+    expect(json.error).toBe("No API key configured for provider: openai")
+  })
+
+  it("persists tool outputs into assistant metadata on finish", async () => {
+    const { POST } = await import("../route")
+
+    const req = createRequest({
+      messages: [{ role: "user", content: "Find recent Crimson Desert updates" }],
+      provider: "openai",
+      model: "gpt-4o",
+      conversationId: "conv-123",
+    })
+
+    await POST(req)
+
+    const streamTextArg = mockStreamText.mock.calls[0]?.[0] as {
+      onFinish?: (event: {
+        text?: string
+        toolResults?: unknown[]
+      }) => Promise<void>
+    }
+    expect(streamTextArg.onFinish).toBeTypeOf("function")
+
+    await streamTextArg.onFinish?.({
+      text: "Here are the latest updates.",
+      toolResults: [
+        {
+          type: "tool-result",
+          toolName: "web_search",
+          toolCallId: "call-1",
+          input: { query: "Crimson Desert news" },
+          output: "Key Updates:\n- [1] Example update\n\nReferences:\n[1] Example Source - https://example.com",
+        },
+      ],
+    })
+
+    expect(mockAddMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-123",
+        role: "assistant",
+        content: "Here are the latest updates.",
+        metadata: expect.any(String),
+      })
+    )
+
+    const addMessageArg = mockAddMessage.mock.calls[0][0] as { metadata: string }
+    const metadata = JSON.parse(addMessageArg.metadata) as { parts: Array<{ type: string }> }
+
+    expect(metadata.parts).toEqual([
+      expect.objectContaining({
+        type: "tool-web_search",
+        state: "output-available",
+        toolCallId: "call-1",
+        input: { query: "Crimson Desert news" },
+      }),
+      expect.objectContaining({
+        type: "text",
+        text: "Here are the latest updates.",
+      }),
+    ])
+    expect(mockExtractMemories).toHaveBeenCalledWith("conv-123")
   })
 })
