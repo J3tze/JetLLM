@@ -1,5 +1,5 @@
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, and } from "drizzle-orm"
 import { ulid } from "ulid"
 import * as schema from "@/lib/db/schema"
 import { getDb } from "@/lib/db"
@@ -34,14 +34,14 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
     },
 
     list(): Conversation[] {
-      return db.select().from(schema.conversations).orderBy(desc(schema.conversations.updatedAt)).all()
+      return db.select().from(schema.conversations).orderBy(desc(schema.conversations.isPinned), desc(schema.conversations.updatedAt)).all()
     },
 
     get(id: string): Conversation | undefined {
       return db.select().from(schema.conversations).where(eq(schema.conversations.id, id)).get()
     },
 
-    update(id: string, data: Partial<{ title: string; model: string; provider: string; systemPrompt: string | null }>): void {
+    update(id: string, data: Partial<{ title: string; model: string; provider: string; systemPrompt: string | null; isPinned: boolean }>): void {
       db.update(schema.conversations)
         .set({ ...data, updatedAt: new Date() })
         .where(eq(schema.conversations.id, id))
@@ -84,6 +84,27 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
         .run()
       return db.select().from(schema.messages).where(eq(schema.messages.id, id)).get()!
     },
+
+    deleteLatestAssistantMessage(conversationId: string): void {
+      const latestAssistant = db.select().from(schema.messages)
+        .where(and(
+          eq(schema.messages.conversationId, conversationId),
+          eq(schema.messages.role, "assistant")
+        ))
+        .orderBy(desc(schema.messages.createdAt), desc(schema.messages.id))
+        .get()
+
+      if (!latestAssistant) return
+
+      db.delete(schema.messages)
+        .where(eq(schema.messages.id, latestAssistant.id))
+        .run()
+
+      db.update(schema.conversations)
+        .set({ updatedAt: new Date() })
+        .where(eq(schema.conversations.id, conversationId))
+        .run()
+    },
   }
 }
 
@@ -114,4 +135,8 @@ export function getMessages(conversationId: string) {
 
 export function addMessage(data: Parameters<ReturnType<typeof createConversationsService>["addMessage"]>[0]) {
   return createConversationsService(getDb()).addMessage(data)
+}
+
+export function deleteLatestAssistantMessage(conversationId: string) {
+  return createConversationsService(getDb()).deleteLatestAssistantMessage(conversationId)
 }

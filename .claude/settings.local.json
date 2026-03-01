@@ -28,7 +28,8 @@
       "Bash(git push origin master)",
       "Bash(git merge origin/feat/wallpaper-glass-transparency)",
       "Bash(npm run dev)",
-      "Bash(npm install sqlite-vec)"
+      "Bash(npm install sqlite-vec)",
+      "Bash(node -e \"console.log\\(require\\(''zod/package.json''\\).version\\)\")"
     ]
   }
 }

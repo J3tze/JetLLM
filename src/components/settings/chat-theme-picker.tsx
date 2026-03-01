@@ -272,13 +272,13 @@ export function ChatThemePicker({ accentHex, chatThemeState }: { accentHex: stri
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
               <Label className="text-xs text-muted-foreground">Panel Transparency</Label>
-              <span className="text-xs font-mono text-muted-foreground">{Math.round(glassOpacity * 100)}%</span>
+              <span className="text-xs font-mono text-muted-foreground">{Math.round((1 - glassOpacity) * 100)}%</span>
             </div>
             <Slider
-              value={[glassOpacity]}
-              onValueChange={([v]) => setGlassOpacity(v)}
-              min={0.1}
-              max={1}
+              value={[1 - glassOpacity]}
+              onValueChange={([v]) => setGlassOpacity(1 - v)}
+              min={0}
+              max={0.95}
               step={0.05}
             />
             <p className="text-[10px] text-muted-foreground/60">

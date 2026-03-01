@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -28,14 +28,18 @@ export function ProjectSettings({ project, open, onOpenChange, onSave }: Project
   const [icon, setIcon] = useState(project.icon || "\u{1F4C1}")
   const [systemPrompt, setSystemPrompt] = useState(project.systemPrompt || "")
 
-  // Reset form when project changes or dialog opens
-  useEffect(() => {
-    if (open) {
-      setName(project.name)
-      setIcon(project.icon || "\u{1F4C1}")
-      setSystemPrompt(project.systemPrompt || "")
+  const resetForm = () => {
+    setName(project.name)
+    setIcon(project.icon || "\u{1F4C1}")
+    setSystemPrompt(project.systemPrompt || "")
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      resetForm()
     }
-  }, [open, project])
+    onOpenChange(nextOpen)
+  }
 
   const handleSave = () => {
     onSave({
@@ -47,7 +51,7 @@ export function ProjectSettings({ project, open, onOpenChange, onSave }: Project
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Project Settings</DialogTitle>

@@ -20,6 +20,7 @@ const EMBEDDING_MODELS: Record<string, string[]> = {
   openai: ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
   google: ["text-embedding-004"],
   mistral: ["mistral-embed"],
+  openrouter: ["openai/text-embedding-3-small", "openai/text-embedding-3-large"],
 }
 
 type RagModelConfig = {
@@ -36,21 +37,27 @@ export function RagSettings() {
   const [modelOpen, setModelOpen] = useState(false)
 
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings", { cache: "no-store" })
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
         if (settings["rag:model"]) {
           setModelConfig(settings["rag:model"] as RagModelConfig)
         }
+      })
+      .catch(() => { })
+
+    fetch("/api/providers/configs", { cache: "no-store" })
+      .then(res => res.ok ? res.json() : {})
+      .then((configs: Record<string, { hasKey: boolean }>) => {
         const configured: string[] = []
         for (const p of PROVIDER_REGISTRY) {
-          const config = settings[`provider:${p.id}`] as { apiKey?: string } | undefined
-          if (config?.apiKey) {
+          if (configs[p.id]?.hasKey) {
             configured.push(p.id)
           }
         }
         setConfiguredProviders(configured)
       })
+      .catch(() => { })
   }, [])
 
   // Fetch models for providers that support it (e.g., OpenRouter)
@@ -71,13 +78,9 @@ export function RagSettings() {
   }, [modelConfig.provider, fetchedModels])
 
   const models = useMemo(() => {
-    // Use embedding-specific models if we have them for this provider
-    const embeddingModels = EMBEDDING_MODELS[modelConfig.provider]
-    if (embeddingModels && embeddingModels.length > 0) {
-      return embeddingModels
-    }
-    // Fall back to fetched models (e.g., OpenRouter)
-    return fetchedModels[modelConfig.provider] ?? []
+    const suggested = EMBEDDING_MODELS[modelConfig.provider] ?? []
+    const fetched = fetchedModels[modelConfig.provider] ?? []
+    return Array.from(new Set([...suggested, ...fetched]))
   }, [fetchedModels, modelConfig.provider])
 
   const showSearchable = models.length > 10
@@ -204,6 +207,13 @@ export function RagSettings() {
               value={modelConfig.model}
               onChange={(e) => handleModelChange(e.target.value)}
               placeholder="e.g., text-embedding-3-small"
+            />
+          )}
+          {modelConfig.provider === "openrouter" && (
+            <Input
+              value={modelConfig.model}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="Or enter manually: openai/text-embedding-3-small"
             />
           )}
           <p className="text-xs text-muted-foreground">

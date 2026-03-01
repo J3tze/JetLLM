@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "./chat-message"
-import { ChevronDown, Globe } from "lucide-react"
+import { ChevronDown, Globe, RotateCw } from "lucide-react"
 import { JetLLMLogo } from "@/components/jetllm-logo"
 import { CodeBlock } from "./code-block"
 import { Button } from "@/components/ui/button"
@@ -59,21 +59,271 @@ function isNearBottom(viewport: HTMLElement, threshold = 80) {
   return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold
 }
 
+function getToolQuery(input: unknown): string {
+  if (!input || typeof input !== "object") return ""
+  const query = (input as Record<string, unknown>).query
+  return typeof query === "string" ? query : ""
+}
+
+function getToolOutputText(output: unknown): string {
+  if (typeof output === "string") return output
+  if (output == null) return ""
+  try {
+    return JSON.stringify(output, null, 2)
+  } catch {
+    return String(output)
+  }
+}
+
+function normalizeToolOutputText(text: string): string {
+  return text
+    .replace(/^###\s+/gm, "")
+    .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+    .trim()
+}
+
+type ParsedReference = {
+  id: string
+  title: string
+  url: string
+}
+
+type ParsedSearchOutput = {
+  updates: string[]
+  references: ParsedReference[]
+  remaining: string[]
+}
+
+type WebSearchResultContentProps = {
+  outputText: string
+  parsedOutput: ParsedSearchOutput
+}
+
+function parseSearchToolOutput(text: string): ParsedSearchOutput {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  const parsed: ParsedSearchOutput = { updates: [], references: [], remaining: [] }
+
+  let section: "updates" | "references" | "other" = "other"
+  for (const line of lines) {
+    if (/^key updates:/i.test(line)) {
+      section = "updates"
+      continue
+    }
+    if (/^references:/i.test(line)) {
+      section = "references"
+      continue
+    }
+
+    if (section === "updates" && line.startsWith("- ")) {
+      parsed.updates.push(line.slice(2).trim())
+      continue
+    }
+
+    if (section === "references") {
+      const urlMatch = line.match(/https?:\/\/\S+/)
+      if (urlMatch) {
+        const rawUrl = urlMatch[0]
+        const url = rawUrl.replace(/[),.;]+$/, "")
+        const idMatch = line.match(/^\[(\d+)\]/)
+        const id = idMatch?.[1] ?? String(parsed.references.length + 1)
+        const withoutId = line.replace(/^\[\d+\]\s*/, "")
+        const title = withoutId.replace(rawUrl, "").replace(/\s*-\s*$/, "").trim() || url
+        parsed.references.push({ id, title, url })
+        continue
+      }
+    }
+
+    parsed.remaining.push(line)
+  }
+
+  return parsed
+}
+
+function WebSearchResultContent({ outputText, parsedOutput }: WebSearchResultContentProps) {
+  const [expanded, setExpanded] = useState(false)
+
+  const needsToggle =
+    parsedOutput.updates.length > 3
+    || parsedOutput.references.length > 4
+    || parsedOutput.remaining.length > 1
+    || outputText.length > 700
+
+  const updates = expanded ? parsedOutput.updates : parsedOutput.updates.slice(0, 3)
+  const references = expanded ? parsedOutput.references : parsedOutput.references.slice(0, 4)
+  const remaining = expanded ? parsedOutput.remaining : parsedOutput.remaining.slice(0, 1)
+
+  const hiddenUpdates = Math.max(0, parsedOutput.updates.length - updates.length)
+  const hiddenReferences = Math.max(0, parsedOutput.references.length - references.length)
+  const hiddenRemaining = Math.max(0, parsedOutput.remaining.length - remaining.length)
+  const hiddenCount = hiddenUpdates + hiddenReferences + hiddenRemaining
+
+  return (
+    <div className="rounded-md bg-black/20 px-3 py-2 text-[13px] leading-5 text-foreground/90 space-y-2">
+      {updates.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/90">Key Updates</p>
+          <ul className="space-y-1">
+            {updates.map((update, idx) => {
+              const cited = update.match(/^\[(\d+)\]\s*(.*)$/)
+              const citation = cited?.[1]
+              const summary = cited?.[2] ?? update
+              return (
+                <li key={`u-${idx}`} className="flex gap-1.5 text-[13px] leading-5">
+                  {citation ? (
+                    <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/15 px-1 text-[11px] font-semibold text-primary">
+                      [{citation}]
+                    </span>
+                  ) : (
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-primary/70 shrink-0" />
+                  )}
+                  <span>{summary}</span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {references.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/90">References</p>
+          <ul className="space-y-1">
+            {references.map((ref) => (
+              <li key={`r-${ref.id}`} className="text-[13px] leading-5">
+                <span className="mr-1 text-primary/90 font-semibold">[{ref.id}]</span>
+                <a
+                  href={ref.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#4f6fa8] underline decoration-[#5f7db3]/70 underline-offset-2 break-all hover:text-[#6f8fc6]"
+                >
+                  {ref.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {updates.length === 0 && references.length === 0 ? (
+        <div className="whitespace-pre-wrap break-words">{outputText}</div>
+      ) : null}
+
+      {remaining.length > 0 ? (
+        <div className="whitespace-pre-wrap break-words text-foreground/80">
+          {remaining.join("\n")}
+        </div>
+      ) : null}
+
+      {needsToggle ? (
+        <div className="pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px] text-primary hover:text-primary/80"
+            onClick={() => setExpanded(prev => !prev)}
+          >
+            {expanded ? "Show less" : `Show more${hiddenCount > 0 ? ` (${hiddenCount})` : ""}`}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function renderWebSearchIndicator(part: unknown, key: number) {
+  if (!part || typeof part !== "object") return null
+
+  const legacyPart = part as {
+    type?: string
+    toolInvocation?: { toolName?: string; state?: string; args?: Record<string, unknown> }
+  }
+  if (legacyPart.type === "tool-invocation" && legacyPart.toolInvocation?.toolName === "web_search") {
+    const query = typeof legacyPart.toolInvocation.args?.query === "string"
+      ? legacyPart.toolInvocation.args.query
+      : ""
+    const isDone = legacyPart.toolInvocation.state === "result"
+    return (
+      <div key={key} className="mb-1">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Globe className="h-3 w-3" />
+          {isDone ? `Searched the web${query ? ` for "${query}"` : ""}` : "Searching the web..."}
+        </div>
+      </div>
+    )
+  }
+
+  const toolPart = part as {
+    type?: string
+    state?: string
+    input?: unknown
+    output?: unknown
+    errorText?: string
+  }
+  if (!toolPart.type?.startsWith("tool-")) return null
+  const toolName = toolPart.type.slice("tool-".length)
+  if (toolName !== "web_search") return null
+
+  const state = toolPart.state ?? "input-streaming"
+  const query = getToolQuery(toolPart.input)
+  const outputText = normalizeToolOutputText(getToolOutputText(toolPart.output))
+  const parsedOutput = parseSearchToolOutput(outputText)
+  const errorText = typeof toolPart.errorText === "string"
+    ? toolPart.errorText
+    : outputText
+  const text =
+    state === "output-available"
+      ? `Searched the web${query ? ` for "${query}"` : ""}`
+      : state === "output-error"
+        ? "Web search failed"
+        : state === "output-denied"
+          ? "Web search denied"
+          : "Searching the web..."
+
+  return (
+    <div key={key} className="mb-1">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Globe className="h-3 w-3" />
+        {text}
+      </div>
+      {state === "output-available" && outputText ? (
+        <div className="mt-1 pl-4 border-l-2 border-border/30">
+          <WebSearchResultContent outputText={outputText} parsedOutput={parsedOutput} />
+        </div>
+      ) : null}
+      {state === "output-error" && errorText ? (
+        <div className="mt-1 pl-4 border-l-2 border-destructive/40 text-xs text-destructive/90 whitespace-pre-wrap">
+          {errorText}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 type MessageListProps = {
   messages: UIMessage[]
   isLoading?: boolean
   bubbleStyle?: BubbleStyle
+  onRetry?: () => void
 }
 
-export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: MessageListProps) {
+export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const isUserScrolledUp = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const greetingSeed = useId()
 
   // Pick a random greeting once per mount
-  const greeting = useMemo(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)], [])
+  const greeting = useMemo(() => {
+    let hash = 0
+    for (const ch of greetingSeed) {
+      hash = (hash * 31 + ch.charCodeAt(0)) % GREETINGS.length
+    }
+    return GREETINGS[hash]
+  }, [greetingSeed])
 
-  // Derive last message text content — changes with every streaming token
+  // Derive last message text content - changes with every streaming token.
   const lastMsg = messages[messages.length - 1]
   const lastMsgText = lastMsg?.parts
     ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
@@ -82,7 +332,9 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
 
   // Track messages.length in a ref so scroll handler doesn't need re-registration
   const messagesLenRef = useRef(messages.length)
-  messagesLenRef.current = messages.length
+  useEffect(() => {
+    messagesLenRef.current = messages.length
+  }, [messages.length])
 
   // Listen for manual scroll events on the viewport (mount once)
   useEffect(() => {
@@ -133,6 +385,12 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
   const showThinking = isLoading && (
     messages.length === 0 || messages[messages.length - 1].role === "user"
   )
+  const visibleMessages = messages.filter(m => m.role === "user" || m.role === "assistant")
+  const lastVisibleMessage = visibleMessages[visibleMessages.length - 1]
+  const canRetryLastAssistant = Boolean(
+    lastVisibleMessage?.role === "assistant"
+    && visibleMessages[visibleMessages.length - 2]?.role === "user"
+  )
 
   return (
     <div className="relative flex-1 flex flex-col">
@@ -141,17 +399,33 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
         ref={scrollAreaRef}
       >
         <div className="max-w-3xl mx-auto py-6 space-y-2">
-          {messages
-            .filter(m => m.role === "user" || m.role === "assistant")
-            .map((message) => (
-              <ChatMessage key={message.id} role={message.role as "user" | "assistant"} bubbleStyle={bubbleStyle}>
+          {visibleMessages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              role={message.role as "user" | "assistant"}
+              bubbleStyle={bubbleStyle}
+              actions={
+                onRetry && !isLoading && canRetryLastAssistant && message.id === lastVisibleMessage?.id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={onRetry}
+                  >
+                    <RotateCw className="h-3 w-3" />
+                    Retry
+                  </Button>
+                ) : null
+              }
+            >
                 {message.parts.map((part, i) => {
                   if (part.type === "reasoning") {
                     return <ReasoningBlock key={i} text={part.text} />
                   }
                   if (part.type === "text") {
                     return (
-                      <div key={i} className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:bg-black/30 prose-pre:rounded-lg prose-code:text-[0.85em] prose-code:before:content-none prose-code:after:content-none prose-headings:my-2 prose-a:text-current prose-a:underline">
+                      <div key={i} className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:bg-black/30 prose-pre:rounded-lg prose-code:text-[0.85em] prose-code:before:content-none prose-code:after:content-none prose-headings:my-1 prose-headings:text-base prose-headings:font-semibold prose-h1:text-base prose-h2:text-base prose-h3:text-sm prose-a:text-current prose-a:underline prose-a:break-all">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -170,26 +444,12 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
                       </div>
                     )
                   }
-                  if (part.type === "tool-invocation") {
-                    const toolPart = part as { type: "tool-invocation"; toolInvocation: { toolName: string; state: string; args?: Record<string, unknown> } }
-                    if (toolPart.toolInvocation.toolName === "web_search") {
-                      return (
-                        <div key={i} className="mb-1">
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Globe className="h-3 w-3" />
-                            {toolPart.toolInvocation.state === "result"
-                              ? `Searched the web for "${toolPart.toolInvocation.args?.query || ""}"`
-                              : "Searching the web..."}
-                          </div>
-                        </div>
-                      )
-                    }
-                    return null
-                  }
+                  const toolIndicator = renderWebSearchIndicator(part, i)
+                  if (toolIndicator) return toolIndicator
                   return null
                 })}
-              </ChatMessage>
-            ))}
+            </ChatMessage>
+          ))}
           {showThinking && (
             <ChatMessage role="assistant" bubbleStyle={bubbleStyle}>
               <span className="animate-pulse">Thinking...</span>
@@ -210,3 +470,4 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat" }: Messa
     </div>
   )
 }
+

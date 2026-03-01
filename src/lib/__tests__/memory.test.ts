@@ -19,6 +19,7 @@ function createTestDb() {
       provider TEXT NOT NULL,
       system_prompt TEXT,
       project_id TEXT,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );

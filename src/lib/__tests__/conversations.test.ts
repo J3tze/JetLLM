@@ -18,6 +18,7 @@ function createTestDb() {
       provider TEXT NOT NULL,
       system_prompt TEXT,
       project_id TEXT,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -93,8 +94,8 @@ describe("Conversations Service", () => {
     it("returns conversations ordered by updatedAt desc", () => {
       // Create conversations with different updatedAt times
       const conv1 = service.create({ model: "gpt-4o", provider: "openai", title: "First" })
-      const conv2 = service.create({ model: "gpt-4o", provider: "openai", title: "Second" })
-      const conv3 = service.create({ model: "gpt-4o", provider: "openai", title: "Third" })
+      service.create({ model: "gpt-4o", provider: "openai", title: "Second" })
+      service.create({ model: "gpt-4o", provider: "openai", title: "Third" })
 
       // Update conv1 to make it most recent
       service.update(conv1.id, { title: "First (updated)" })
@@ -297,6 +298,52 @@ describe("Conversations Service", () => {
       const messages2 = service.getMessages(conv2.id)
       expect(messages2).toHaveLength(1)
       expect(messages2[0].content).toBe("Conv2 msg")
+    })
+  })
+
+  describe("deleteLatestAssistantMessage", () => {
+    it("deletes only the newest assistant message", () => {
+      const conv = service.create({ model: "gpt-4o", provider: "openai" })
+
+      service.addMessage({
+        conversationId: conv.id,
+        role: "assistant",
+        content: "Assistant reply 1",
+      })
+      service.addMessage({
+        conversationId: conv.id,
+        role: "user",
+        content: "User follow-up",
+      })
+      service.addMessage({
+        conversationId: conv.id,
+        role: "assistant",
+        content: "Assistant reply 2",
+      })
+
+      service.deleteLatestAssistantMessage(conv.id)
+
+      const messages = service.getMessages(conv.id)
+      expect(messages).toHaveLength(2)
+      const contents = messages.map(message => message.content)
+      expect(contents).toContain("Assistant reply 1")
+      expect(contents).toContain("User follow-up")
+      expect(contents).not.toContain("Assistant reply 2")
+    })
+
+    it("does nothing when there is no assistant message", () => {
+      const conv = service.create({ model: "gpt-4o", provider: "openai" })
+      service.addMessage({
+        conversationId: conv.id,
+        role: "user",
+        content: "Only user",
+      })
+
+      service.deleteLatestAssistantMessage(conv.id)
+
+      const messages = service.getMessages(conv.id)
+      expect(messages).toHaveLength(1)
+      expect(messages[0].content).toBe("Only user")
     })
   })
 })

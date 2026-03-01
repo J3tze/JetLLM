@@ -24,14 +24,14 @@ export function createProjectsService(db: BetterSQLite3Database<typeof schema>) 
     },
 
     list(): Project[] {
-      return db.select().from(schema.projects).orderBy(desc(schema.projects.updatedAt)).all()
+      return db.select().from(schema.projects).orderBy(desc(schema.projects.isPinned), desc(schema.projects.updatedAt)).all()
     },
 
     get(id: string): Project | undefined {
       return db.select().from(schema.projects).where(eq(schema.projects.id, id)).get()
     },
 
-    update(id: string, data: Partial<{ name: string; icon: string; systemPrompt: string | null }>): void {
+    update(id: string, data: Partial<{ name: string; icon: string; systemPrompt: string | null; isPinned: boolean }>): void {
       db.update(schema.projects)
         .set({ ...data, updatedAt: new Date() })
         .where(eq(schema.projects.id, id))
@@ -45,14 +45,14 @@ export function createProjectsService(db: BetterSQLite3Database<typeof schema>) 
     getConversations(projectId: string) {
       return db.select().from(schema.conversations)
         .where(eq(schema.conversations.projectId, projectId))
-        .orderBy(desc(schema.conversations.updatedAt))
+        .orderBy(desc(schema.conversations.isPinned), desc(schema.conversations.updatedAt))
         .all()
     },
 
     getStandaloneConversations() {
       return db.select().from(schema.conversations)
         .where(isNull(schema.conversations.projectId))
-        .orderBy(desc(schema.conversations.updatedAt))
+        .orderBy(desc(schema.conversations.isPinned), desc(schema.conversations.updatedAt))
         .all()
     },
   }

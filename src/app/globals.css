@@ -149,17 +149,21 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   html {
     background-color: var(--background);
   }
+
   body {
     @apply text-foreground;
     background-color: transparent;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
   }
+
   /* Use dvh for full-height layouts on mobile (accounts for address bar) */
-  html, body {
+  html,
+  body {
     height: 100dvh;
   }
 }
@@ -229,7 +233,20 @@ html[data-wallpaper] [data-slot="card"] {
   .safe-area-top {
     padding-top: env(safe-area-inset-top);
   }
+
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Hide scrollbar while maintaining scroll functionality */
+@layer base {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

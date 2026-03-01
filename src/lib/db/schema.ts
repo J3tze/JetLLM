@@ -12,6 +12,7 @@ export const projects = sqliteTable("projects", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
 })
 
 export const conversations = sqliteTable("conversations", {
@@ -28,6 +29,7 @@ export const conversations = sqliteTable("conversations", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
 })
 
 export const messages = sqliteTable("messages", {

@@ -15,7 +15,7 @@ export function ChatSettings() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings", { cache: "no-store" })
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
         if (typeof settings["chat:userName"] === "string") {

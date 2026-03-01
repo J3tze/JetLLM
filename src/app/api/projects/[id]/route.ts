@@ -43,9 +43,9 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, icon, systemPrompt } = body
+    const { name, icon, systemPrompt, isPinned } = body
 
-    updateProject(id, { name, icon, systemPrompt })
+    updateProject(id, { name, icon, systemPrompt, isPinned })
     const updated = getProject(id)
     return NextResponse.json(updated)
   } catch (error) {

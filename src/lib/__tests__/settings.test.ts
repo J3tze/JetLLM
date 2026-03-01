@@ -2,13 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import Database from "better-sqlite3"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import * as schema from "../db/schema"
-import {
-  getSetting,
-  setSetting,
-  deleteSetting,
-  getAllSettings,
-  createSettingsService,
-} from "../settings"
+import { createSettingsService } from "../settings"
 
 function createTestDb() {
   const sqlite = new Database(":memory:")

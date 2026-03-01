@@ -1,5 +1,6 @@
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import { eq, desc } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { ulid } from "ulid"
 import * as schema from "@/lib/db/schema"
 import { getDb } from "@/lib/db"
@@ -29,7 +30,7 @@ export function createMemoryService(db: BetterSQLite3Database<typeof schema>) {
 
     list(): Memory[] {
       return db.select().from(schema.memories)
-        .orderBy(desc(schema.memories.id))
+        .orderBy(desc(schema.memories.createdAt), desc(schema.memories.id))
         .all()
     },
 
@@ -53,14 +54,15 @@ export function createMemoryService(db: BetterSQLite3Database<typeof schema>) {
     existsByContent(content: string): boolean {
       const row = db.select()
         .from(schema.memories)
-        .where(eq(schema.memories.content, content))
+        .where(sql`${schema.memories.content} = ${content} COLLATE NOCASE`)
         .get()
       return !!row
     },
 
     getFormattedForInjection(maxChars: number = 2000): string {
       const memories = db.select().from(schema.memories)
-        .orderBy(desc(schema.memories.id))
+        .orderBy(desc(schema.memories.createdAt), desc(schema.memories.id))
+        .limit(50)
         .all()
 
       if (memories.length === 0) return ""

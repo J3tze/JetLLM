@@ -8,8 +8,31 @@ export type SearchResult = {
 
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 const MAX_CONTENT_LENGTH = 1000
+const SUMMARY_CONTENT_LENGTH = 220
 const DEFAULT_LIMIT = 5
 const TIMEOUT_MS = 10000
+
+function normalizeSnippet(text: string): string {
+  return text
+    .replace(/\r?\n+/g, " ")
+    .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+    .replace(/^#+\s+/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function summarizeSnippet(text: string): string {
+  const normalized = normalizeSnippet(text)
+  if (!normalized) return ""
+  if (normalized.length <= SUMMARY_CONTENT_LENGTH) return normalized
+
+  const cutoff = normalized.slice(0, SUMMARY_CONTENT_LENGTH)
+  const sentenceEnd = Math.max(cutoff.lastIndexOf("."), cutoff.lastIndexOf("!"), cutoff.lastIndexOf("?"))
+  if (sentenceEnd > 80) {
+    return cutoff.slice(0, sentenceEnd + 1).trim()
+  }
+  return cutoff.trim() + "..."
+}
 
 export async function searchWeb(query: string, limit: number = DEFAULT_LIMIT): Promise<SearchResult[]> {
   const apiKey = getSetting<string>("search:tavilyKey")
@@ -57,9 +80,46 @@ export async function searchWeb(query: string, limit: number = DEFAULT_LIMIT): P
 export function formatSearchResults(results: SearchResult[]): string {
   if (results.length === 0) return ""
 
-  const formatted = results.map(r =>
-    `### [${r.title}](${r.url})\n${r.content}`
-  ).join("\n\n")
+  const keyFindings = results.map((r, idx) => {
+    const summary = summarizeSnippet(r.content)
+    return `- [${idx + 1}] ${r.title}: ${summary || "No summary available."}`
+  }).join("\n")
 
-  return `## Web Search Results\nThe following search results were retrieved for the user's query. Use these to inform your response. Cite sources when relevant.\n\n${formatted}`
+  const references = results.map((r, idx) => {
+    return `[${idx + 1}] ${r.title} - ${r.url}`
+  }).join("\n")
+
+  return [
+    "## Web Search Brief",
+    "Use the brief below as evidence. Paraphrase instead of copying snippets verbatim.",
+    "",
+    "Key findings:",
+    keyFindings,
+    "",
+    "References:",
+    references,
+  ].join("\n")
+}
+
+export function formatSearchToolSummary(results: SearchResult[]): string {
+  if (results.length === 0) {
+    return "Key updates:\n- No web results found.\n\nReferences:\n- None"
+  }
+
+  const keyUpdates = results.map((r, idx) => {
+    const summary = summarizeSnippet(r.content)
+    return `- [${idx + 1}] ${r.title}: ${summary || "No summary available."}`
+  }).join("\n")
+
+  const references = results.map((r, idx) => {
+    return `[${idx + 1}] ${r.title} - ${r.url}`
+  }).join("\n")
+
+  return [
+    "Key updates:",
+    keyUpdates,
+    "",
+    "References:",
+    references,
+  ].join("\n")
 }

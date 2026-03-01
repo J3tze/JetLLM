@@ -41,7 +41,9 @@ export function EmojiPicker({ value, onSelect, children }: EmojiPickerProps) {
                 onSelect(emoji)
                 setOpen(false)
               }}
-              className="flex items-center justify-center h-8 w-8 rounded hover:bg-white/10 transition-colors text-lg"
+              className={`flex items-center justify-center h-8 w-8 rounded transition-colors text-lg ${
+                value === emoji ? "bg-white/15 ring-1 ring-white/20" : "hover:bg-white/10"
+              }`}
             >
               {emoji}
             </button>

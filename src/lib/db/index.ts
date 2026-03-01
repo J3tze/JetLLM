@@ -18,7 +18,8 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
       icon TEXT,
       system_prompt TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      is_pinned INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS conversations (
@@ -29,7 +30,8 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
       system_prompt TEXT,
       project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      is_pinned INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -92,6 +94,48 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
   } catch {
     // Column already exists — ignore
   }
+
+  // Migration: add is_pinned column
+  try {
+    sqlite.exec(`ALTER TABLE projects ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`)
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec(`ALTER TABLE conversations ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`)
+  } catch {
+    // Column already exists
+  }
+
+  // Query performance indexes for hot paths (lists, message history, pinning, memory lookup)
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_projects_pinned_updated
+    ON projects(is_pinned DESC, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_pinned_updated
+    ON conversations(is_pinned DESC, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_project_pinned_updated
+    ON conversations(project_id, is_pinned DESC, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
+    ON messages(conversation_id, created_at ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_role_created
+    ON messages(conversation_id, role, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_memories_content_nocase
+    ON memories(content COLLATE NOCASE);
+
+    CREATE INDEX IF NOT EXISTS idx_memories_created
+    ON memories(created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_documents_project_created
+    ON documents(project_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_document_index
+    ON document_chunks(document_id, chunk_index);
+  `)
 }
 
 export function getDb() {

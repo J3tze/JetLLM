@@ -7,27 +7,27 @@ type ChatMessageProps = {
   role: "user" | "assistant"
   bubbleStyle?: BubbleStyle
   children: React.ReactNode
+  actions?: React.ReactNode
 }
 
-export function ChatMessage({ role, bubbleStyle = "flat", children }: ChatMessageProps) {
+export function ChatMessage({ role, bubbleStyle = "flat", children, actions }: ChatMessageProps) {
   const isUser = role === "user"
 
   // Flat: current behavior — subtle tint on user, nothing on assistant
   if (bubbleStyle === "flat") {
     return (
       <div
-        className={cn(
-          "px-4 py-4",
-          isUser && "bg-white/[0.03] rounded-2xl"
-        )}
-        style={{ color: isUser
-          ? "var(--chat-user-bubble-fg, var(--chat-text-color))"
-          : "var(--chat-assistant-bubble-fg, var(--chat-text-color))"
+        className={cn("px-4 py-4", isUser && "bg-white/[0.03] rounded-2xl")}
+        style={{
+          color: isUser
+            ? "var(--chat-user-bubble-fg, var(--chat-text-color))"
+            : "var(--chat-assistant-bubble-fg, var(--chat-text-color))",
         }}
       >
         <div className="text-sm leading-relaxed" style={{ fontFamily: "var(--chat-font)" }}>
           {children}
         </div>
+        {actions ? <div className="mt-2">{actions}</div> : null}
       </div>
     )
   }
@@ -49,6 +49,7 @@ export function ChatMessage({ role, bubbleStyle = "flat", children }: ChatMessag
         <div className="text-sm leading-relaxed" style={{ fontFamily: "var(--chat-font)" }}>
           {children}
         </div>
+        {actions ? <div className="mt-2">{actions}</div> : null}
       </div>
     )
   }
@@ -61,7 +62,7 @@ export function ChatMessage({ role, bubbleStyle = "flat", children }: ChatMessag
           "px-4 py-3 max-w-[80%]",
           isUser
             ? "rounded-2xl rounded-br-md"
-            : "rounded-2xl rounded-bl-md",
+            : "rounded-2xl rounded-bl-md"
         )}
         style={{
           backgroundColor: isUser
@@ -75,6 +76,7 @@ export function ChatMessage({ role, bubbleStyle = "flat", children }: ChatMessag
         <div className="text-sm leading-relaxed" style={{ fontFamily: "var(--chat-font)" }}>
           {children}
         </div>
+        {actions ? <div className="mt-2">{actions}</div> : null}
       </div>
     </div>
   )

@@ -32,7 +32,7 @@ export function MemorySettings() {
 
   useEffect(() => {
     // Load memory settings
-    fetch("/api/settings")
+    fetch("/api/settings", { cache: "no-store" })
       .then(res => res.json())
       .then((settings: Record<string, unknown>) => {
         if (settings["memory:enabled"] !== undefined) {
@@ -42,10 +42,10 @@ export function MemorySettings() {
           setModelConfig(settings["memory:model"] as MemoryModelConfig)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
 
     // Load configured providers from the providers/configs endpoint
-    fetch("/api/providers/configs")
+    fetch("/api/providers/configs", { cache: "no-store" })
       .then(res => res.ok ? res.json() : {})
       .then((configs: Record<string, { hasKey: boolean }>) => {
         const configured: string[] = []
@@ -56,7 +56,7 @@ export function MemorySettings() {
         }
         setConfiguredProviders(configured)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   // Fetch models for providers that support it (e.g., OpenRouter)
@@ -76,14 +76,10 @@ export function MemorySettings() {
       .finally(() => setLoadingModels(false))
   }, [modelConfig.provider, fetchedModels])
 
-  const providerDef = PROVIDER_REGISTRY.find(p => p.id === modelConfig.provider)
-  const staticModels = providerDef?.defaultModels ?? []
-
   const models = useMemo(() => {
-    return staticModels.length > 0
-      ? staticModels
-      : (fetchedModels[modelConfig.provider] ?? [])
-  }, [staticModels, fetchedModels, modelConfig.provider])
+    const staticModels = PROVIDER_REGISTRY.find(p => p.id === modelConfig.provider)?.defaultModels ?? []
+    return staticModels.length > 0 ? staticModels : (fetchedModels[modelConfig.provider] ?? [])
+  }, [fetchedModels, modelConfig.provider])
 
   const showSearchable = models.length > 10
 
@@ -223,6 +219,13 @@ export function MemorySettings() {
                   value={modelConfig.model}
                   onChange={(e) => handleModelChange(e.target.value)}
                   placeholder="e.g., gpt-4o-mini"
+                />
+              )}
+              {modelConfig.provider === "openrouter" && (
+                <Input
+                  value={modelConfig.model}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  placeholder="Or enter manually: openai/gpt-4o-mini"
                 />
               )}
               <p className="text-xs text-muted-foreground">
