@@ -41,36 +41,59 @@ export function ModelSelector({
   onProviderChange,
   onModelChange,
 }: ModelSelectorProps) {
-  const providerDef = PROVIDER_REGISTRY.find(p => p.id === provider)
-  const staticModels = providerDef?.defaultModels ?? []
-
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({})
   const fetchedRef = useRef<Record<string, boolean>>({})
+  const activeRequestRef = useRef(0)
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (!FETCHABLE_PROVIDERS.has(provider)) return
-    if (fetchedRef.current[provider]) return
-    fetchedRef.current[provider] = true
+    if (!FETCHABLE_PROVIDERS.has(provider)) {
+      setLoading(false)
+      return
+    }
+    if (fetchedRef.current[provider]) {
+      setLoading(false)
+      return
+    }
 
-    setLoading(true)
-    fetch(`/api/providers/models?provider=${provider}`)
-      .then(res => res.ok ? res.json() : { models: [] })
-      .then((data: { models: string[] }) => {
+    const requestId = activeRequestRef.current + 1
+    activeRequestRef.current = requestId
+    const controller = new AbortController()
+
+    async function loadModels() {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/providers/models?provider=${provider}`, { signal: controller.signal })
+        if (!res.ok) throw new Error("Failed to load provider models")
+
+        const data: { models: string[] } = await res.json()
+        if (controller.signal.aborted) return
+
         setFetchedModels(prev => ({ ...prev, [provider]: data.models }))
-      })
-      .catch(() => {
-        setFetchedModels(prev => ({ ...prev, [provider]: [] }))
-      })
-      .finally(() => setLoading(false))
+        fetchedRef.current[provider] = true
+      } catch {
+        if (!controller.signal.aborted) {
+          setFetchedModels(prev => ({ ...prev, [provider]: [] }))
+        }
+      } finally {
+        if (activeRequestRef.current === requestId) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadModels()
+
+    return () => {
+      controller.abort()
+    }
   }, [provider])
 
   const models = useMemo(() => {
-    return staticModels.length > 0
-      ? staticModels
-      : (fetchedModels[provider] ?? [])
-  }, [staticModels, fetchedModels, provider])
+    const staticModels = PROVIDER_REGISTRY.find(p => p.id === provider)?.defaultModels ?? []
+    return staticModels.length > 0 ? staticModels : (fetchedModels[provider] ?? [])
+  }, [fetchedModels, provider])
 
   const showSearchable = models.length > 10
 

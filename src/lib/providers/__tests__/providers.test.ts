@@ -1,6 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { PROVIDER_REGISTRY } from "../registry"
 
+const {
+  createOpenAIMock,
+  openAIProviderMock,
+  openAIChatMock,
+} = vi.hoisted(() => {
+  const openAIChatMock = vi.fn((modelId: string) => ({ kind: "chat", modelId }))
+  const openAIProviderMock = Object.assign(
+    vi.fn((modelId: string) => ({ kind: "responses", modelId })),
+    {
+      chat: openAIChatMock,
+      embedding: vi.fn((modelId: string) => ({ kind: "embedding", modelId })),
+    }
+  )
+  const createOpenAIMock = vi.fn(() => openAIProviderMock)
+  return { createOpenAIMock, openAIProviderMock, openAIChatMock }
+})
+
 // Mock the settings module
 vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn(() => null),
@@ -8,7 +25,7 @@ vi.mock("@/lib/settings", () => ({
 
 // Mock the AI SDK packages to avoid needing actual SDK installs for unit tests
 vi.mock("@ai-sdk/openai", () => ({
-  createOpenAI: vi.fn(() => vi.fn(() => ({ modelId: "mock-openai" }))),
+  createOpenAI: createOpenAIMock,
 }))
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: vi.fn(() => vi.fn(() => ({ modelId: "mock-anthropic" }))),
@@ -163,6 +180,31 @@ describe("getModel", () => {
     const model = getModel("groq", "llama-3.3-70b-versatile")
     expect(model).toBeDefined()
   })
+
+  it.each(["groq", "openrouter", "together", "custom"])(
+    "uses chat model constructor for %s provider",
+    async (providerId) => {
+      vi.doMock("@/lib/settings", () => ({
+        getSetting: vi.fn(() =>
+          providerId === "custom"
+            ? {
+                apiKey: "custom-key",
+                baseUrl: "https://my-custom-api.example.com/v1",
+              }
+            : { apiKey: "sk-test-key" }
+        ),
+      }))
+
+      const { getModel } = await import("../index")
+
+      const modelId = "test-model"
+      const model = getModel(providerId, modelId)
+
+      expect(openAIChatMock).toHaveBeenCalledWith(modelId)
+      expect(openAIProviderMock).not.toHaveBeenCalledWith(modelId)
+      expect(model).toEqual({ kind: "chat", modelId })
+    }
+  )
 
   it("throws for custom provider when no baseUrl is provided", async () => {
     vi.doMock("@/lib/settings", () => ({
