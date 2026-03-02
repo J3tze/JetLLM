@@ -180,6 +180,9 @@ Path alias: `@` maps to `src/`.
 - Revalidated the mobile chat UX pass (`src/hooks/use-swipe-sidebar.ts`, `src/components/app/main-shell.tsx`, `src/components/chat/chat-panel.tsx`, `src/components/chat/model-selector.tsx`, `src/components/chat/chat-input.tsx`) with `npm run lint` and `npm run build` passing; targeted `npm test -- src/components/chat/__tests__/model-selector.test.tsx` currently exits with an environment-level Vitest `ERR_REQUIRE_ESM` (`html-encoding-sniffer` via `@exodus/bytes`) before test collection.
 - Updated the Send action styling in `src/components/chat/chat-input.tsx` to use the same neutral white/grey treatment as other composer icon buttons (instead of accented primary color) so the mobile input controls stay visually consistent.
 - Removed the Send button's disabled-state dimming in `src/components/chat/chat-input.tsx` so it stays the same neutral white/grey shade as the `+`, attach, and mic controls even when sending is unavailable.
+- Hardened the mirrored `deploy` skills at `C:\Users\Jetze\.config\opencode\skills\deploy\SKILL.md` and `C:\Users\Jetze\.codex\skills\user\deploy\SKILL.md` to check `glab` auth first and use `GLAB_TOKEN`/`GITLAB_TOKEN` env fallback for private-pipeline polling, while explicitly avoiding hardcoded PATs in skill files.
+- Stored `GITLAB_TOKEN` and `GLAB_TOKEN` as persistent user environment variables on the local machine (without saving secrets in repo files) so GitLab private-pipeline checks can authenticate across new shell sessions.
+- Trimmed `AGENTS.md` recent notes to keep this log focused on project-relevant engineering/deploy changes rather than local desktop customization entries.
 
 ## Planning Docs
 
