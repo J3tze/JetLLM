@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
@@ -8,6 +9,11 @@ type OpenRouterModel = {
 }
 
 export async function GET(request: NextRequest) {
+  const user = getCurrentUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const provider = request.nextUrl.searchParams.get("provider")
 
   if (provider !== "openrouter") {

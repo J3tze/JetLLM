@@ -6,6 +6,7 @@ import * as schema from "@/lib/db/schema"
 import { getProject } from "@/lib/projects"
 import { processDocument } from "@/lib/rag/process"
 import { getSetting, type ProviderConfig } from "@/lib/settings"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
@@ -28,10 +29,15 @@ type RagModelConfig = {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { id } = await params
     const project = getProject(id)
 
@@ -62,6 +68,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { id } = await params
     const project = getProject(id)
 

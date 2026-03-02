@@ -32,6 +32,11 @@ vi.mock("@/lib/memory/extract", () => ({
   extractMemories: (...args: unknown[]) => mockExtractMemories(...args),
 }))
 
+const mockGetCurrentUserFromRequest = vi.fn()
+vi.mock("@/lib/auth-server", () => ({
+  getCurrentUserFromRequest: (...args: unknown[]) => mockGetCurrentUserFromRequest(...args),
+}))
+
 describe("POST /api/chat", () => {
   const mockModel = { modelId: "mock-model" }
 
@@ -48,6 +53,13 @@ describe("POST /api/chat", () => {
     ])
     mockTool.mockImplementation((definition: unknown) => definition)
     mockExtractMemories.mockResolvedValue(undefined)
+    mockGetCurrentUserFromRequest.mockReturnValue({
+      id: "user-1",
+      email: "user@example.com",
+      displayName: "User",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
     mockStreamText.mockReturnValue({
       toUIMessageStreamResponse: () =>
         new Response("streaming response", { status: 200 }),

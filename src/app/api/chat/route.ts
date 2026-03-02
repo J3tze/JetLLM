@@ -9,6 +9,7 @@ import { searchWeb, formatSearchResults, formatSearchToolSummary } from "@/lib/s
 import { getProject } from "@/lib/projects"
 import { searchDocuments, formatRagContext } from "@/lib/rag/search"
 import { autoTitleConversation } from "@/lib/conversations/auto-title"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const maxDuration = 60
 
@@ -155,6 +156,14 @@ function buildAssistantParts(options: {
 
 export async function POST(req: Request) {
   try {
+    const user = getCurrentUserFromRequest(req)
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     const body = await req.json()
     const {
       messages,

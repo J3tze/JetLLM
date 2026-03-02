@@ -1,7 +1,7 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useEffect, useRef, useCallback, useMemo, useId, type ReactNode } from "react"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "./chat-message"
 import { ChevronDown, Globe, RotateCw, FileText } from "lucide-react"
 import { JetLLMLogo } from "@/components/jetllm-logo"
@@ -50,7 +50,7 @@ const GREETINGS = [
 ]
 
 function getViewport(ref: React.RefObject<HTMLDivElement | null>) {
-  return ref.current?.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
+  return ref.current
 }
 
 function isNearBottom(viewport: HTMLElement, threshold = 80) {
@@ -139,29 +139,35 @@ function parseSearchToolOutput(text: string): ParsedSearchOutput {
 
 function renderFilePart(part: { mediaType: string; url: string; filename?: string }, key: number) {
   const isImage = part.mediaType.startsWith("image/")
-  const label = part.filename || part.mediaType || "Attached file"
+  const label = part.filename || (isImage ? "Attached image" : "Attached file")
 
   if (isImage) {
     return (
-      <div key={key} className="mb-1">
-        <div className="text-[11px] text-muted-foreground mb-1">{label}</div>
-        <img
+      <div key={key} className="mb-1 overflow-hidden rounded-lg border border-border/40 bg-black/20">
+        <Image
           src={part.url}
-          alt={part.filename || "Uploaded image"}
-          className="max-h-72 max-w-full rounded-md border border-border/50 bg-black/20 object-contain"
+          alt={label}
+          width={960}
+          height={720}
+          unoptimized
+          className="max-h-80 w-full bg-black/30 object-contain"
           loading="lazy"
         />
+        <div className="truncate px-2 py-1 text-[11px] text-muted-foreground">{label}</div>
       </div>
     )
   }
 
   return (
-    <div key={key} className="mb-1">
-      <div className="inline-flex items-center gap-2 rounded-md border border-border/50 bg-black/20 px-2 py-1 text-xs text-foreground/90">
+    <a
+      key={key}
+      href={part.url}
+      download={part.filename || "attachment"}
+      className="mb-1 inline-flex max-w-full items-center gap-2 rounded-md border border-border/50 bg-black/20 px-2.5 py-1.5 text-xs text-foreground/90 hover:border-primary/40 hover:text-foreground"
+    >
         <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="max-w-[260px] truncate">{label}</span>
-      </div>
-    </div>
+      <span className="max-w-[240px] truncate">{label}</span>
+    </a>
   )
 }
 
@@ -594,9 +600,9 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
   )
 
   return (
-    <div className="relative flex-1 flex flex-col">
-      <ScrollArea
-        className="flex-1"
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className="scrollbar-none min-h-0 flex-1 overflow-y-auto"
         ref={scrollAreaRef}
       >
         <div className="max-w-3xl mx-auto py-6 space-y-2">
@@ -660,7 +666,7 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
             </ChatMessage>
           )}
         </div>
-      </ScrollArea>
+      </div>
       {showScrollBtn && (
         <Button
           size="icon"

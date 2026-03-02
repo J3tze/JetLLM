@@ -17,6 +17,8 @@ export type ChatInputSendPayload = {
   files: File[]
 }
 
+const ACCEPTED_CHAT_ATTACHMENTS = "image/*,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.log,.html,.htm,.css,.js,.ts,.tsx,.jsx,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.sql,.sh,.ps1"
+
 type ChatInputProps = {
   onSend: (payload: ChatInputSendPayload) => void
   isLoading?: boolean
@@ -47,19 +49,6 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
       textareaRef.current.style.height = "auto"
     }
   }, [value, files, isLoading, onSend])
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
-  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
-    const target = e.currentTarget
-    target.style.height = "auto"
-    target.style.height = `${target.scrollHeight}px`
-  }
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const incoming = event.target.files
@@ -93,15 +82,28 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
     setToolsOpen(false)
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget
+    target.style.height = "auto"
+    target.style.height = `${target.scrollHeight}px`
+  }
+
   return (
-    <div className="px-4 pb-4 pt-2 safe-area-bottom">
+    <div className="sticky bottom-0 z-20 shrink-0 px-4 pb-4 pt-2 safe-area-bottom bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-sm">
       <div className="max-w-3xl mx-auto">
         <input
           ref={fileInputRef}
           type="file"
           className="hidden"
           multiple
-          accept="image/*,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.log,.html,.htm,.css,.js,.ts,.tsx,.jsx,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.sql,.sh,.ps1"
+          accept={ACCEPTED_CHAT_ATTACHMENTS}
           onChange={handleFilesSelected}
         />
 
@@ -129,14 +131,13 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
           </div>
         ) : null}
 
-        <div className="flex items-end rounded-xl border border-border/50 bg-white/[0.03] overflow-hidden">
-          {/* + button for tools popover */}
+        <div className="flex items-end overflow-hidden rounded-xl border border-border/50 bg-white/[0.03]">
           <Popover open={toolsOpen} onOpenChange={setToolsOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  "flex items-center justify-center h-11 w-11 shrink-0 text-muted-foreground hover:text-foreground transition-colors",
+                  "flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground",
                   toolsOpen && "text-foreground"
                 )}
               >
@@ -160,7 +161,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="web-search" className="text-sm cursor-pointer">Web Search</Label>
+                      <Label htmlFor="web-search" className="cursor-pointer text-sm">Web Search</Label>
                     </div>
                     <Switch
                       id="web-search"
@@ -177,7 +178,19 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
             </PopoverContent>
           </Popover>
 
-          {/* Textarea */}
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            disabled={isLoading}
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors",
+              isLoading ? "cursor-not-allowed opacity-50" : "hover:text-foreground"
+            )}
+            aria-label="Attach files"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
+
           <Textarea
             ref={textareaRef}
             value={value}
@@ -186,16 +199,15 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
             onInput={handleInput}
             placeholder="Type a message..."
             rows={1}
-            className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
+            className="min-h-[44px] max-h-[200px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
           />
 
-          {/* Send button */}
           <button
             type="button"
             onClick={handleSend}
             disabled={!hasInput || isLoading}
             className={cn(
-              "flex items-center justify-center h-11 w-11 shrink-0 transition-colors",
+              "flex h-11 w-11 shrink-0 items-center justify-center transition-colors",
               hasInput && !isLoading
                 ? "text-primary hover:text-primary/80"
                 : "text-muted-foreground/30"
@@ -205,9 +217,8 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
           </button>
         </div>
 
-        {/* Active tools indicator */}
         {webSearch && (
-          <div className="flex items-center gap-1.5 mt-1.5 ml-1">
+          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
             <Globe className="h-3 w-3 text-primary" />
             <span className="text-[11px] text-primary">Web search enabled</span>
           </div>

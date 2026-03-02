@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server"
 import { listMemories, createMemory } from "@/lib/memory"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const user = getCurrentUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const memories = listMemories()
   return NextResponse.json(memories)
 }
 
 export async function POST(request: Request) {
+  const user = getCurrentUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const body = await request.json()
   const { type, content } = body
 

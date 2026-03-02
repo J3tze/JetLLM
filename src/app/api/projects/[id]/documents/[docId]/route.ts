@@ -3,12 +3,18 @@ import { eq } from "drizzle-orm"
 import { getDb, getRawDb } from "@/lib/db"
 import * as schema from "@/lib/db/schema"
 import { getProject } from "@/lib/projects"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; docId: string }> }
 ) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { id, docId } = await params
     const project = getProject(id)
 

@@ -42,7 +42,7 @@ function applyWallpaper(bgColor: string, bgImage?: string) {
 
 export function ThemeInitializer() {
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings?keys=ui:accentColor,ui:chatTheme")
       .then(res => {
         if (!res.ok) throw new Error(`Settings fetch failed: ${res.status}`)
         return res.json()

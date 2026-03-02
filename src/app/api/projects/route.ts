@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 import { listProjects, createProject } from "@/lib/projects"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const projects = listProjects()
     return NextResponse.json(projects)
   } catch (error) {
@@ -13,6 +19,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const { name, icon } = body
 

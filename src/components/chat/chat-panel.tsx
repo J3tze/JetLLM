@@ -237,7 +237,6 @@ async function buildFileParts(files: File[]): Promise<FileUIPart[]> {
       url,
     }
   }))
-
   return parts
 }
 
@@ -409,10 +408,10 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
 
   const handleSend = useCallback(async ({ text, files }: ChatInputSendPayload) => {
     try {
-      if (!text && files.length === 0) {
+      const trimmedText = text.trim()
+      if (!trimmedText && files.length === 0) {
         return
       }
-
       let activeConvId = convIdRef.current
 
       // Auto-create conversation on first message
@@ -421,7 +420,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
         const createBody: Record<string, unknown> = {
           model: stateRef.current.model,
           provider: stateRef.current.provider,
-          title: (text || fallbackTitle).slice(0, 50),
+          title: (trimmedText || fallbackTitle).slice(0, 50),
         }
         // Attach projectId if creating within a project context
         if (projectIdRef.current) {
@@ -444,7 +443,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       const fileParts = files.length > 0 ? await buildFileParts(files) : []
       const persistedTextFileParts = fileParts.filter(part => isTextDocument(part.mediaType, part.filename))
       const persistedParts: UIMessage["parts"] = [
-        ...(text ? [{ type: "text" as const, text }] : []),
+        ...(trimmedText ? [{ type: "text" as const, text: trimmedText }] : []),
         ...persistedTextFileParts,
       ]
       const metadata = persistedTextFileParts.length > 0
@@ -468,10 +467,10 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       })
       if (!persistRes.ok) throw new Error("Failed to persist message")
 
-      if (text && fileParts.length > 0) {
-        await sendMessage({ text, files: fileParts })
-      } else if (text) {
-        await sendMessage({ text })
+      if (trimmedText && fileParts.length > 0) {
+        await sendMessage({ text: trimmedText, files: fileParts })
+      } else if (trimmedText) {
+        await sendMessage({ text: trimmedText })
       } else if (fileParts.length > 0) {
         await sendMessage({ files: fileParts })
       }
@@ -521,8 +520,8 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   }
 
   return (
-    <div className="flex flex-col h-full safe-area-top">
-      <div className="px-4 pt-2 pb-3 flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden safe-area-top">
+      <div className="sticky top-0 z-20 shrink-0 px-4 pt-2 pb-3 flex items-center gap-2 bg-gradient-to-b from-background via-background/95 to-transparent backdrop-blur-sm">
         <SidebarTrigger className="h-8 w-8" />
         <ModelSelector
           provider={provider}

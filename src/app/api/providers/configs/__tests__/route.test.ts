@@ -8,6 +8,11 @@ vi.mock("@/lib/settings", () => ({
   setSetting: (...args: unknown[]) => mockSetSetting(...args),
 }))
 
+const mockGetCurrentUserFromRequest = vi.fn()
+vi.mock("@/lib/auth-server", () => ({
+  getCurrentUserFromRequest: (...args: unknown[]) => mockGetCurrentUserFromRequest(...args),
+}))
+
 function createPutRequest(body: unknown): Request {
   return new Request("http://localhost:3000/api/providers/configs", {
     method: "PUT",
@@ -19,6 +24,13 @@ function createPutRequest(body: unknown): Request {
 describe("PUT /api/providers/configs", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetCurrentUserFromRequest.mockReturnValue({
+      id: "user-1",
+      email: "user@example.com",
+      displayName: "User",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
   })
 
   it("preserves existing API key when payload omits apiKey", async () => {

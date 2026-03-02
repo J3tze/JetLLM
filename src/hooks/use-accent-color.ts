@@ -35,7 +35,9 @@ function applyAccent(hsl: string) {
 }
 
 export function useAccentColor() {
-  const [accent, setAccentState] = useState<AccentPreset>(ACCENT_PRESETS[0])
+  const [accent, setAccentState] = useState<AccentPreset>(
+    ACCENT_PRESETS.find(p => p.name === "Green") ?? ACCENT_PRESETS[0]
+  )
 
   useEffect(() => {
     fetch("/api/settings")

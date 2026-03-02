@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server"
 import { setSetting, getAllSettings } from "@/lib/settings"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
+const PUBLIC_UNAUTH_KEYS = new Set<string>([
+  "ui:accentColor",
+  "ui:chatTheme",
+])
+
 export async function GET(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
     const { searchParams } = new URL(request.url)
     const keysParam = searchParams.get("keys")
     const requestedKeys = keysParam
@@ -15,12 +22,16 @@ export async function GET(request: Request) {
           .filter(Boolean)
       )
       : null
+    const effectiveRequestedKeys = !user && !requestedKeys
+      ? PUBLIC_UNAUTH_KEYS
+      : requestedKeys
 
     const settings = getAllSettings()
     // Filter out provider API keys and avoid returning raw search secrets.
     const publicSettings: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(settings)) {
-      if (requestedKeys && !requestedKeys.has(key)) continue
+      if (effectiveRequestedKeys && !effectiveRequestedKeys.has(key)) continue
+      if (!user && !PUBLIC_UNAUTH_KEYS.has(key)) continue
       if (key.startsWith("provider:")) continue
       if (key === "search:tavilyKey") {
         publicSettings[key] = Boolean(value)
@@ -37,6 +48,11 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const { key, value } = body
 

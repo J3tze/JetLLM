@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSetting, setSetting } from "@/lib/settings"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
@@ -18,8 +19,13 @@ type StoredProviderConfig = {
  * Returns provider configs with API keys masked for display.
  * Only shows whether a key is configured (masked) or not.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const configs: Record<string, { hasKey: boolean; baseUrl?: string }> = {}
     for (const p of PROVIDER_REGISTRY) {
       const config = getSetting<{ apiKey?: string; baseUrl?: string }>(`provider:${p.id}`)
@@ -42,6 +48,11 @@ export async function GET() {
  */
 export async function PUT(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body: unknown = await request.json()
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })

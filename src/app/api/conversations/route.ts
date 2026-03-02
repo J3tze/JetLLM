@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server"
 import { listConversations, createConversation } from "@/lib/conversations"
 import { getProjectConversations, getStandaloneConversations } from "@/lib/projects"
+import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get("projectId")
 
@@ -27,6 +33,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const user = getCurrentUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const { model, provider, title, systemPrompt, projectId } = body
 

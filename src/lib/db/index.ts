@@ -82,6 +82,23 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE IF NOT EXISTS document_chunks (
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -150,6 +167,15 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
 
     CREATE INDEX IF NOT EXISTS idx_document_chunks_document_index
     ON document_chunks(document_id, chunk_index);
+
+    CREATE INDEX IF NOT EXISTS idx_users_email
+    ON users(email);
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_token_hash
+    ON sessions(token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_expires
+    ON sessions(user_id, expires_at DESC);
   `)
 }
 
