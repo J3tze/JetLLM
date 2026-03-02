@@ -1,4 +1,4 @@
-import { streamText, UIMessage, convertToModelMessages, tool } from "ai"
+import { streamText, UIMessage, convertToModelMessages, getTextFromDataUrl, tool } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/providers"
 import { addMessage, deleteLatestAssistantMessage, getConversation } from "@/lib/conversations"
@@ -17,6 +17,48 @@ const THINKING_MODEL_PATTERNS = [
   /^claude-sonnet-4/,
   /^claude-opus-4/,
 ]
+const TEXT_FILE_MEDIA_TYPES = new Set([
+  "application/json",
+  "application/xml",
+  "application/javascript",
+  "application/x-javascript",
+  "application/sql",
+  "application/x-sh",
+  "application/x-httpd-php",
+  "application/x-yaml",
+  "application/yaml",
+])
+
+const TEXT_FILE_EXTENSIONS = new Set([
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "tsv",
+  "json",
+  "xml",
+  "yaml",
+  "yml",
+  "log",
+  "html",
+  "htm",
+  "css",
+  "js",
+  "ts",
+  "tsx",
+  "jsx",
+  "py",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "hpp",
+  "rs",
+  "go",
+  "sql",
+  "sh",
+  "ps1",
+])
 
 type PersistedMessagePart = {
   type: string
@@ -27,13 +69,50 @@ function isThinkingModel(modelId: string): boolean {
   return THINKING_MODEL_PATTERNS.some(p => p.test(modelId))
 }
 
+function getFileExtension(filename: string): string {
+  const dotIndex = filename.lastIndexOf(".")
+  return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : ""
+}
+
+function isTextDocumentFilePart(part: { mediaType?: unknown; filename?: unknown }): boolean {
+  const mediaType = typeof part.mediaType === "string" ? part.mediaType.toLowerCase() : ""
+  if (mediaType.startsWith("text/")) {
+    return true
+  }
+  if (TEXT_FILE_MEDIA_TYPES.has(mediaType)) {
+    return true
+  }
+  const filename = typeof part.filename === "string" ? part.filename : ""
+  return filename ? TEXT_FILE_EXTENSIONS.has(getFileExtension(filename)) : false
+}
+
+function getFilePartText(part: { url?: unknown }): string {
+  if (typeof part.url !== "string" || !part.url.startsWith("data:")) {
+    return ""
+  }
+  try {
+    return getTextFromDataUrl(part.url).trim()
+  } catch {
+    return ""
+  }
+}
+
 function getMessageText(message: UIMessage): string {
-  const partText = (message.parts ?? [])
+  const textParts = (message.parts ?? [])
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map(part => part.text)
-    .join("")
+    .join("\n")
 
-  if (partText) return partText
+  const textFileParts = (message.parts ?? [])
+    .filter((part): part is { type: "file"; mediaType: string; filename?: string; url: string } => {
+      return part.type === "file" && isTextDocumentFilePart(part)
+    })
+    .map(part => getFilePartText(part))
+    .filter(Boolean)
+    .join("\n\n")
+
+  const combinedText = [textParts, textFileParts].filter(Boolean).join("\n\n")
+  if (combinedText) return combinedText
 
   const legacyContent = (message as { content?: unknown }).content
   return typeof legacyContent === "string" ? legacyContent : ""

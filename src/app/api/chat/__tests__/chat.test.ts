@@ -24,6 +24,7 @@ vi.mock("ai", () => ({
   streamText: (...args: unknown[]) => mockStreamText(...args),
   convertToModelMessages: (...args: unknown[]) => mockConvertToModelMessages(...args),
   tool: (definition: unknown) => mockTool(definition),
+  getTextFromDataUrl: () => "",
 }))
 
 const mockExtractMemories = vi.fn()

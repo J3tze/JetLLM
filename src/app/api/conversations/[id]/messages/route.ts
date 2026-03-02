@@ -37,6 +37,8 @@ export async function POST(
     conversationId: id,
     role: body.role,
     content: body.content,
+    ...(typeof body.toolCalls === "string" ? { toolCalls: body.toolCalls } : {}),
+    ...(typeof body.metadata === "string" ? { metadata: body.metadata } : {}),
   })
   return NextResponse.json(message, { status: 201 })
 }

@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import type { UIMessage } from "ai"
+import type { UIMessage, FileUIPart } from "ai"
 import { MessageList } from "./message-list"
 import { ChatInput } from "./chat-input"
+import type { ChatInputSendPayload } from "./chat-input"
 import { ModelSelector } from "./model-selector"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
@@ -35,6 +36,79 @@ type ConversationLoadAction = "clear" | "skip" | "load"
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 4096
 const DEFAULT_TOP_P = 1
+const TEXT_MEDIA_TYPES = new Set([
+  "application/json",
+  "application/xml",
+  "application/javascript",
+  "application/x-javascript",
+  "application/sql",
+  "application/x-sh",
+  "application/x-httpd-php",
+  "application/x-yaml",
+  "application/yaml",
+])
+
+const TEXT_FILE_EXTENSIONS = new Set([
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "tsv",
+  "json",
+  "xml",
+  "yaml",
+  "yml",
+  "log",
+  "html",
+  "htm",
+  "css",
+  "js",
+  "ts",
+  "tsx",
+  "jsx",
+  "py",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "hpp",
+  "rs",
+  "go",
+  "sql",
+  "sh",
+  "ps1",
+])
+
+const EXTENSION_MEDIA_TYPES: Record<string, string> = {
+  txt: "text/plain",
+  md: "text/markdown",
+  markdown: "text/markdown",
+  csv: "text/csv",
+  tsv: "text/tab-separated-values",
+  json: "application/json",
+  xml: "application/xml",
+  yaml: "application/x-yaml",
+  yml: "application/x-yaml",
+  log: "text/plain",
+  html: "text/html",
+  htm: "text/html",
+  css: "text/css",
+  js: "application/javascript",
+  ts: "text/plain",
+  tsx: "text/plain",
+  jsx: "text/plain",
+  py: "text/plain",
+  java: "text/plain",
+  c: "text/plain",
+  cpp: "text/plain",
+  h: "text/plain",
+  hpp: "text/plain",
+  rs: "text/plain",
+  go: "text/plain",
+  sql: "application/sql",
+  sh: "application/x-sh",
+  ps1: "text/plain",
+}
 
 export function getConversationLoadAction(
   previousConversationId: string | null | undefined,
@@ -110,6 +184,61 @@ function parseStoredParts(content: string, metadata: string | null | undefined):
   }
 
   return [{ type: "text" as const, text: content }]
+}
+
+function getFileExtension(filename: string): string {
+  const dotIndex = filename.lastIndexOf(".")
+  return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : ""
+}
+
+function inferMediaType(file: File): string {
+  if (file.type) return file.type
+  const extension = getFileExtension(file.name)
+  return EXTENSION_MEDIA_TYPES[extension] ?? "application/octet-stream"
+}
+
+function isTextDocument(mediaType: string, filename?: string): boolean {
+  if (mediaType.startsWith("text/")) {
+    return true
+  }
+  if (TEXT_MEDIA_TYPES.has(mediaType)) {
+    return true
+  }
+  if (!filename) {
+    return false
+  }
+  return TEXT_FILE_EXTENSIONS.has(getFileExtension(filename))
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === "string") {
+        resolve(result)
+        return
+      }
+      reject(new Error(`Unexpected file read result type for ${file.name}`))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read file: ${file.name}`))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function buildFileParts(files: File[]): Promise<FileUIPart[]> {
+  const parts = await Promise.all(files.map(async (file): Promise<FileUIPart> => {
+    const mediaType = inferMediaType(file)
+    const url = await readFileAsDataUrl(file)
+    return {
+      type: "file",
+      mediaType,
+      filename: file.name,
+      url,
+    }
+  }))
+
+  return parts
 }
 
 export function ChatPanel({ conversationId, onConversationCreated, projectId, projectInitMessage, onProjectInitConsumed }: ChatPanelProps) {
@@ -278,16 +407,21 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   const projectIdRef = useRef(projectId)
   projectIdRef.current = projectId
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async ({ text, files }: ChatInputSendPayload) => {
     try {
+      if (!text && files.length === 0) {
+        return
+      }
+
       let activeConvId = convIdRef.current
 
       // Auto-create conversation on first message
       if (!activeConvId) {
+        const fallbackTitle = files[0]?.name ? `File: ${files[0].name}` : "New Chat"
         const createBody: Record<string, unknown> = {
           model: stateRef.current.model,
           provider: stateRef.current.provider,
-          title: text.slice(0, 50),
+          title: (text || fallbackTitle).slice(0, 50),
         }
         // Attach projectId if creating within a project context
         if (projectIdRef.current) {
@@ -307,15 +441,40 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
         onConversationCreated?.(conv.id)
       }
 
+      const fileParts = files.length > 0 ? await buildFileParts(files) : []
+      const persistedTextFileParts = fileParts.filter(part => isTextDocument(part.mediaType, part.filename))
+      const persistedParts: UIMessage["parts"] = [
+        ...(text ? [{ type: "text" as const, text }] : []),
+        ...persistedTextFileParts,
+      ]
+      const metadata = persistedTextFileParts.length > 0
+        ? JSON.stringify({ parts: persistedParts })
+        : undefined
+      const persistedContent = text || (
+        files.length > 0 && !metadata
+          ? `[Uploaded ${files.length} attachment${files.length > 1 ? "s" : ""}: ${files.map(file => file.name).join(", ")}]`
+          : ""
+      )
+
       // Persist user message to DB
       const persistRes = await fetch(`/api/conversations/${activeConvId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: "user", content: text }),
+        body: JSON.stringify({
+          role: "user",
+          content: persistedContent,
+          ...(metadata ? { metadata } : {}),
+        }),
       })
       if (!persistRes.ok) throw new Error("Failed to persist message")
 
-      await sendMessage({ text })
+      if (text && fileParts.length > 0) {
+        await sendMessage({ text, files: fileParts })
+      } else if (text) {
+        await sendMessage({ text })
+      } else if (fileParts.length > 0) {
+        await sendMessage({ files: fileParts })
+      }
     } catch (error) {
       console.error("[handleSend] Error:", error)
     }
@@ -335,7 +494,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   useEffect(() => {
     if (projectInitMessage && !projectInitHandled.current && defaultsLoaded) {
       projectInitHandled.current = true
-      handleSend(projectInitMessage.text)
+      handleSend({ text: projectInitMessage.text, files: [] })
       onProjectInitConsumed?.()
     }
     if (!projectInitMessage) {

@@ -1,14 +1,29 @@
 import { drizzle, BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import Database from "better-sqlite3"
-import * as sqliteVec from "sqlite-vec"
 import * as schema from "./schema"
 import path from "path"
 import fs from "fs"
+import { createRequire } from "module"
 
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "jetllm.db")
+const nodeRequire = createRequire(process.cwd() + "/src/lib/db/index.ts")
 
 let db: BetterSQLite3Database<typeof schema>
 let rawSqlite: InstanceType<typeof Database>
+
+function loadSqliteVecExtension(sqlite: InstanceType<typeof Database>) {
+  // Optional runtime dependency: avoid static import so builds still pass when sqlite-vec is missing.
+  try {
+    const maybeModule = nodeRequire("sqlite-vec") as { load?: (db: InstanceType<typeof Database>) => void }
+    if (typeof maybeModule.load === "function") {
+      maybeModule.load(sqlite)
+      return
+    }
+    console.warn("[db] sqlite-vec module found but has no load() export (RAG will be unavailable)")
+  } catch (err) {
+    console.warn("[db] sqlite-vec not installed/available (RAG will be unavailable):", err)
+  }
+}
 
 function ensureTables(sqlite: InstanceType<typeof Database>) {
   sqlite.exec(`
@@ -152,11 +167,7 @@ export function getDb() {
     sqlite.pragma("busy_timeout = 5000")
 
     // Load sqlite-vec extension (graceful — app works without it, just no RAG vector search)
-    try {
-      sqliteVec.load(sqlite)
-    } catch (err) {
-      console.warn("[db] sqlite-vec extension failed to load (RAG will be unavailable):", err)
-    }
+    loadSqliteVecExtension(sqlite)
     ensureTables(sqlite)
 
     rawSqlite = sqlite
