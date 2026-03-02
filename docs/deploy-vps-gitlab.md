@@ -55,6 +55,11 @@ Optional for private registry pulls on VPS:
 - `VPS_REGISTRY_USER`: GitLab deploy token username (or other read-only registry user)
 - `VPS_REGISTRY_PASSWORD`: matching password/token
 
+Recommended flags:
+- Mark secrets as `Protected` (`VPS_SSH_PRIVATE_KEY`, `VPS_REGISTRY_PASSWORD`).
+- Mark deploy host/user values as `Protected` as well.
+- `VPS_SSH_PRIVATE_KEY` may not be maskable in GitLab if value validation fails; protected/unmasked is acceptable if your project access is restricted.
+
 ## 4) How the pipeline behaves
 
 On default branch push:
@@ -71,6 +76,7 @@ On Git tag:
 ## 5) Manual deployment
 
 You can run `deploy_vps` manually from `CI/CD -> Pipelines` (default branch only). It redeploys `latest`.
+In a non-push pipeline (for example manual/API-triggered pipeline), `deploy_vps` appears as a manual job by design.
 
 ## 6) Rollback
 
@@ -87,3 +93,12 @@ docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
 - Persistent SQLite data remains in Docker volume `jetllm-data` mounted at `/app/data`.
 - If you use Cloudflare + reverse proxy, keep proxy timeout/buffering settings suitable for streaming responses.
 - If you change deploy files (`docker-compose.deploy.yml`, `.env.deploy`, scripts), sync those to VPS manually once; the CI deploy job is image-only.
+
+## Troubleshooting
+
+- Error: `Identity verification is required in order to run CI jobs`
+  - Complete GitLab identity verification in the web UI, then rerun the pipeline.
+- Error during `deploy_vps`: `error from registry: access forbidden`
+  - Set `VPS_REGISTRY_USER` and `VPS_REGISTRY_PASSWORD` so the VPS can `docker login` to `registry.gitlab.com` before pull.
+- Pipeline has no jobs
+  - Check branch/rule conditions and verify pipeline was created on the default branch.

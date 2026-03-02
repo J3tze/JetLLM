@@ -98,9 +98,9 @@ export function ModelSelector({
   const showSearchable = models.length > 10
 
   return (
-    <div className="flex gap-2 flex-1 sm:flex-initial min-w-0">
+    <div className="flex w-full max-w-[19rem] min-w-0 items-center gap-1.5 sm:w-auto sm:max-w-none sm:flex-initial sm:gap-2">
       <Select value={provider} onValueChange={onProviderChange}>
-        <SelectTrigger className="min-w-[140px] h-9 shrink-0 text-xs !border-border !bg-transparent">
+        <SelectTrigger className="h-9 w-[7.5rem] min-w-0 shrink-0 text-xs !border-border !bg-transparent sm:w-auto sm:min-w-[140px]">
           <SelectValue placeholder="Provider" />
         </SelectTrigger>
         <SelectContent>
@@ -113,7 +113,7 @@ export function ModelSelector({
       </Select>
 
       {loading ? (
-        <div className="min-w-[200px] flex-1 sm:flex-initial h-9 flex items-center px-3 text-xs text-muted-foreground rounded-md border border-border bg-transparent">
+        <div className="h-9 min-w-0 flex-1 rounded-md border border-border bg-transparent px-3 text-xs text-muted-foreground sm:min-w-[200px] sm:flex-initial flex items-center">
           Loading models...
         </div>
       ) : showSearchable ? (
@@ -123,7 +123,7 @@ export function ModelSelector({
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className="min-w-[200px] flex-1 sm:flex-initial h-9 justify-between text-xs font-normal !bg-transparent !border-border"
+              className="h-9 min-w-0 flex-1 justify-between text-xs font-normal !bg-transparent !border-border sm:min-w-[200px] sm:flex-initial"
             >
               <span className="truncate">
                 {model || "Select model..."}
@@ -131,7 +131,7 @@ export function ModelSelector({
               <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0 border-border" align="start">
+          <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] p-0 border-border" align="start">
             <Command className="bg-transparent">
               <CommandInput placeholder="Search models..." className="text-xs" />
               <CommandList>
@@ -156,7 +156,7 @@ export function ModelSelector({
         </Popover>
       ) : models.length > 0 ? (
         <Select value={model} onValueChange={onModelChange}>
-          <SelectTrigger className="min-w-[200px] flex-1 sm:flex-initial h-9 text-xs !border-border !bg-transparent">
+          <SelectTrigger className="h-9 min-w-0 flex-1 text-xs !border-border !bg-transparent sm:min-w-[200px] sm:flex-initial">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
@@ -172,7 +172,7 @@ export function ModelSelector({
           value={model}
           onChange={e => onModelChange(e.target.value)}
           placeholder="Enter model ID..."
-          className="min-w-[200px] flex-1 sm:flex-initial h-9 text-xs border-border bg-transparent"
+          className="h-9 min-w-0 flex-1 text-xs border-border bg-transparent sm:min-w-[200px] sm:flex-initial"
         />
       )}
     </div>

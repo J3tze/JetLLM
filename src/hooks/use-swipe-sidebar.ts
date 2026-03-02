@@ -2,42 +2,67 @@
 
 import { useEffect, useRef } from "react"
 
-/**
- * Detects a right-swipe gesture starting from the left edge of the screen
- * and calls `onOpen` to open the sidebar.
- *
- * Usage: call inside a component that lives within `SidebarProvider`, passing
- * `() => setOpenMobile(true)` from the `useSidebar()` hook.
- *
- * The gesture triggers when:
- * - The touch starts within 30px of the left edge
- * - The horizontal distance exceeds 50px
- * - The horizontal distance exceeds the vertical distance (prevents
- *   accidental triggers while scrolling)
- */
-export function useSwipeSidebar(onOpen: () => void) {
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
+const EDGE_OPEN_ZONE_PX = 30
+const CLOSE_ZONE_MAX_PX = 360
+const SWIPE_THRESHOLD_PX = 50
+
+type SwipeIntent = "open" | "close"
+
+type SwipeSidebarOptions = {
+  isOpen: boolean
+  onOpen: () => void
+  onClose: () => void
+}
+
+export function useSwipeSidebar({ isOpen, onOpen, onClose }: SwipeSidebarOptions) {
+  const touchStart = useRef<{ x: number; y: number; intent: SwipeIntent } | null>(null)
 
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0]
-      // Only track touches that begin near the left edge
-      if (touch.clientX < 30) {
-        touchStart.current = { x: touch.clientX, y: touch.clientY }
+      if (!touch) {
+        touchStart.current = null
+        return
       }
+
+      if (!isOpen && touch.clientX <= EDGE_OPEN_ZONE_PX) {
+        touchStart.current = { x: touch.clientX, y: touch.clientY, intent: "open" }
+        return
+      }
+
+      if (isOpen && touch.clientX <= Math.min(window.innerWidth, CLOSE_ZONE_MAX_PX)) {
+        touchStart.current = { x: touch.clientX, y: touch.clientY, intent: "close" }
+        return
+      }
+
+      touchStart.current = null
     }
 
     const handleTouchEnd = (e: TouchEvent) => {
       if (!touchStart.current) return
       const touch = e.changedTouches[0]
-      const dx = touch.clientX - touchStart.current.x
-      const dy = Math.abs(touch.clientY - touchStart.current.y)
+      if (!touch) {
+        touchStart.current = null
+        return
+      }
+
+      const { x, y, intent } = touchStart.current
+      const dx = touch.clientX - x
+      const dy = Math.abs(touch.clientY - y)
+      const absDx = Math.abs(dx)
       touchStart.current = null
 
-      // Require a clear horizontal swipe: at least 50px right, and more
-      // horizontal than vertical to avoid triggering on vertical scrolls.
-      if (dx > 50 && dy < dx) {
+      if (absDx < SWIPE_THRESHOLD_PX || dy >= absDx) {
+        return
+      }
+
+      if (intent === "open" && dx > 0) {
         onOpen()
+        return
+      }
+
+      if (intent === "close" && dx < 0) {
+        onClose()
       }
     }
 
@@ -47,5 +72,5 @@ export function useSwipeSidebar(onOpen: () => void) {
       document.removeEventListener("touchstart", handleTouchStart)
       document.removeEventListener("touchend", handleTouchEnd)
     }
-  }, [onOpen])
+  }, [isOpen, onOpen, onClose])
 }

@@ -522,13 +522,16 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden safe-area-top">
       <div className="sticky top-0 z-20 shrink-0 px-4 pt-2 pb-3 flex items-center gap-2 bg-gradient-to-b from-background via-background/95 to-transparent backdrop-blur-sm">
-        <SidebarTrigger className="h-8 w-8" />
-        <ModelSelector
-          provider={provider}
-          model={model}
-          onProviderChange={handleProviderChange}
-          onModelChange={setModel}
-        />
+        <SidebarTrigger className="h-8 w-8 shrink-0" />
+        <div className="flex min-w-0 flex-1 justify-center">
+          <ModelSelector
+            provider={provider}
+            model={model}
+            onProviderChange={handleProviderChange}
+            onModelChange={setModel}
+          />
+        </div>
+        <div className="h-8 w-8 shrink-0 sm:hidden" aria-hidden />
       </div>
       <MessageList
         messages={messages}

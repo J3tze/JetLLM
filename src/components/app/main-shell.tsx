@@ -131,9 +131,10 @@ export function MainShell() {
   if (!mounted) return null
 
   function SwipeHandler() {
-    const { setOpenMobile } = useSidebar()
-    const openMobile = useCallback(() => setOpenMobile(true), [setOpenMobile])
-    useSwipeSidebar(openMobile)
+    const { openMobile, setOpenMobile } = useSidebar()
+    const openBySwipe = useCallback(() => setOpenMobile(true), [setOpenMobile])
+    const closeBySwipe = useCallback(() => setOpenMobile(false), [setOpenMobile])
+    useSwipeSidebar({ isOpen: openMobile, onOpen: openBySwipe, onClose: closeBySwipe })
     return null
   }
 

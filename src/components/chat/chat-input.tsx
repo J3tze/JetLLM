@@ -122,6 +122,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   const acceptTranscriptionResultsRef = useRef(false)
 
   const hasInput = value.trim().length > 0 || files.length > 0
+  const iconButtonClass = "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 
   const buildSpeechText = useCallback((baseText: string, spokenText: string) => {
     const trimmedBase = baseText.trim()
@@ -461,7 +462,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
 
   return (
     <div className="sticky bottom-0 z-20 shrink-0 px-4 pb-4 pt-2 safe-area-bottom bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-sm">
-      <div className="max-w-3xl mx-auto">
+      <div className="w-full max-w-3xl mx-auto">
         <input
           ref={fileInputRef}
           type="file"
@@ -472,12 +473,12 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
         />
 
         {files.length > 0 ? (
-          <div className="mb-2 rounded-xl border border-border/50 bg-white/[0.02] p-2">
+          <div className="mb-2 rounded-xl border border-border/50 bg-background/65 p-2">
             <div className="flex flex-wrap gap-1.5">
               {files.map((file, index) => (
                 <span
                   key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-black/25 px-2 py-1 text-xs text-foreground/90"
+                  className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/80 px-2 py-1 text-xs text-foreground/90"
                 >
                   <Paperclip className="h-3 w-3 text-muted-foreground" />
                   <span className="max-w-[180px] truncate">{file.name}</span>
@@ -495,17 +496,18 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
           </div>
         ) : null}
 
-        <div className="flex items-end overflow-hidden rounded-xl border border-border/50 bg-white/[0.03]">
+        <div className="flex items-end gap-1.5 rounded-2xl border border-border/50 bg-background/80 px-2.5 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
           <Popover open={toolsOpen} onOpenChange={setToolsOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  "flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground",
-                  toolsOpen && "text-foreground"
+                  iconButtonClass,
+                  toolsOpen && "bg-foreground/5 text-foreground"
                 )}
+                aria-label="Open tools"
               >
-                <Plus className="h-5 w-5" />
+                <Plus className="h-4 w-4" />
               </button>
             </PopoverTrigger>
             <PopoverContent side="top" align="start" className="w-56 p-3">
@@ -542,62 +544,54 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
             </PopoverContent>
           </Popover>
 
-          <button
-            type="button"
-            onClick={handleUploadClick}
-            disabled={isLoading}
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors",
-              isLoading ? "cursor-not-allowed opacity-50" : "hover:text-foreground"
-            )}
-            aria-label="Attach files"
-          >
-            <Paperclip className="h-5 w-5" />
-          </button>
+            <button
+              type="button"
+              onClick={handleUploadClick}
+              disabled={isLoading}
+              className={iconButtonClass}
+              aria-label="Attach files"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
 
-          <Textarea
-            ref={textareaRef}
+            <Textarea
+              ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            onInput={handleInput}
-            placeholder="Type a message..."
-            rows={1}
-            className="min-h-[44px] max-h-[200px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
+              onInput={handleInput}
+              placeholder="Type a message..."
+              rows={1}
+              className="min-h-[40px] max-h-[180px] flex-1 resize-none border-0 bg-transparent px-1.5 py-2 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
 
-          <button
-            type="button"
-            onClick={handleMicClick}
-            disabled={isLoading || isTranscribing}
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center transition-colors",
-              isRecording
-                ? "text-primary hover:text-primary/80"
-                : isLoading || isTranscribing
-                  ? "text-muted-foreground/30"
-                  : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-label={isRecording ? "Stop voice input" : "Start voice input"}
-            title={isTranscribing ? "Transcribing..." : (isRecording ? "Stop recording" : "Start recording")}
-          >
-            {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-5 w-5" />}
-          </button>
+            <button
+              type="button"
+              onClick={handleMicClick}
+              disabled={isLoading || isTranscribing}
+              className={cn(
+                iconButtonClass,
+                isRecording
+                  ? "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
+                  : isLoading || isTranscribing
+                    ? "text-muted-foreground/40 hover:bg-transparent hover:text-muted-foreground/40"
+                    : undefined
+              )}
+              aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+              title={isTranscribing ? "Transcribing..." : (isRecording ? "Stop recording" : "Start recording")}
+            >
+              {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!hasInput || isLoading || isTranscribing}
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center transition-colors",
-              hasInput && !isLoading && !isTranscribing
-                ? "text-primary hover:text-primary/80"
-                : "text-muted-foreground/30"
-            )}
-          >
-            <SendHorizontal className="h-5 w-5" />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!hasInput || isLoading || isTranscribing}
+              className={cn(iconButtonClass, "text-muted-foreground/80 disabled:text-muted-foreground/80 disabled:opacity-100")}
+            >
+              <SendHorizontal className="h-4 w-4" />
+            </button>
+          </div>
 
         {isRecording && (
           <div className="ml-1 mt-1.5 flex items-center gap-1.5">
