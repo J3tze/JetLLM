@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Popover,
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Plus, SendHorizontal, Globe, Paperclip, X } from "lucide-react"
+import { Plus, SendHorizontal, Globe, Paperclip, X, Mic, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type ChatInputSendPayload = {
@@ -18,6 +18,81 @@ export type ChatInputSendPayload = {
 }
 
 const ACCEPTED_CHAT_ATTACHMENTS = "image/*,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.log,.html,.htm,.css,.js,.ts,.tsx,.jsx,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.sql,.sh,.ps1"
+const PREFERRED_RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/mp4",
+]
+
+type SpeechRecognitionAlternativeLike = {
+  transcript: string
+}
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean
+  length: number
+  [index: number]: SpeechRecognitionAlternativeLike
+}
+
+type SpeechRecognitionEventLike = Event & {
+  resultIndex: number
+  results: ArrayLike<SpeechRecognitionResultLike>
+}
+
+type SpeechRecognitionErrorEventLike = Event & {
+  error?: string
+}
+
+type BrowserSpeechRecognition = EventTarget & {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  onerror: ((event: Event) => void) | null
+  onend: ((event: Event) => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition
+
+type BrowserWindowWithSpeechRecognition = Window & {
+  SpeechRecognition?: BrowserSpeechRecognitionConstructor
+  webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor
+}
+
+function resolveSpeechError(errorCode?: string): string {
+  switch (errorCode) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Microphone permission is blocked for this site."
+    case "audio-capture":
+      return "No microphone was detected."
+    case "network":
+      return "Speech recognition service is unavailable right now."
+    case "no-speech":
+      return "No speech was detected. Try speaking a bit louder."
+    default:
+      return "Unable to start voice input."
+  }
+}
+
+function resolveTranscriptionError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  return "Transcription failed. Please try again."
+}
+
+function chooseRecorderMimeType(recorderConstructor: typeof MediaRecorder): string | undefined {
+  if (typeof recorderConstructor.isTypeSupported !== "function") {
+    return undefined
+  }
+  return PREFERRED_RECORDER_MIME_TYPES.find((mimeType) => recorderConstructor.isTypeSupported(mimeType))
+}
 
 type ChatInputProps = {
   onSend: (payload: ChatInputSendPayload) => void
@@ -31,14 +106,255 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   const [value, setValue] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [speechError, setSpeechError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const recordingModeRef = useRef<"speech-api" | "media-recorder" | null>(null)
+  const speechBaseTextRef = useRef("")
+  const speechFinalTextRef = useRef("")
+  const acceptSpeechResultsRef = useRef(false)
+  const acceptTranscriptionResultsRef = useRef(false)
 
   const hasInput = value.trim().length > 0 || files.length > 0
 
+  const buildSpeechText = useCallback((baseText: string, spokenText: string) => {
+    const trimmedBase = baseText.trim()
+    const trimmedSpoken = spokenText.trim()
+    if (!trimmedBase) return trimmedSpoken
+    if (!trimmedSpoken) return trimmedBase
+    return `${trimmedBase} ${trimmedSpoken}`
+  }, [])
+
+  const stopMediaStream = useCallback(() => {
+    const stream = mediaStreamRef.current
+    if (!stream) {
+      return
+    }
+    stream.getTracks().forEach(track => track.stop())
+    mediaStreamRef.current = null
+  }, [])
+
+  const ensureRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      return recognitionRef.current
+    }
+
+    const browserWindow = window as BrowserWindowWithSpeechRecognition
+    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition
+    if (!Recognition) {
+      return null
+    }
+
+    const recognition = new Recognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = navigator.language || "en-US"
+
+    recognition.onresult = (event) => {
+      if (!acceptSpeechResultsRef.current) {
+        return
+      }
+
+      let interimText = ""
+      let finalText = speechFinalTextRef.current
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i]
+        const transcript = result[0]?.transcript ?? ""
+        if (result.isFinal) {
+          finalText += `${transcript} `
+        } else {
+          interimText += transcript
+        }
+      }
+      speechFinalTextRef.current = finalText
+      setValue(buildSpeechText(speechBaseTextRef.current, `${finalText}${interimText}`))
+    }
+
+    recognition.onerror = (event) => {
+      const errorEvent = event as SpeechRecognitionErrorEventLike
+      setSpeechError(resolveSpeechError(errorEvent.error))
+      setIsRecording(false)
+      recordingModeRef.current = null
+    }
+
+    recognition.onend = () => {
+      setIsRecording(false)
+      recordingModeRef.current = null
+    }
+
+    recognitionRef.current = recognition
+    return recognition
+  }, [buildSpeechText])
+
+  const transcribeAudioBlob = useCallback(async (audioBlob: Blob) => {
+    if (audioBlob.size === 0) {
+      setSpeechError("No audio was captured. Try recording again.")
+      return
+    }
+
+    setIsTranscribing(true)
+    try {
+      const extension = audioBlob.type.includes("ogg")
+        ? "ogg"
+        : audioBlob.type.includes("mp4")
+          ? "mp4"
+          : "webm"
+      const formData = new FormData()
+      formData.append("audio", audioBlob, `recording.${extension}`)
+      const response = await fetch("/api/speech/transcribe", {
+        method: "POST",
+        body: formData,
+      })
+
+      const payload = await response.json().catch(() => null) as { text?: unknown; error?: unknown } | null
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Transcription failed. Configure Groq or OpenAI in Settings."
+        throw new Error(message)
+      }
+
+      const transcript = typeof payload?.text === "string" ? payload.text.trim() : ""
+      if (!transcript) {
+        setSpeechError("No speech detected in the recording.")
+        return
+      }
+
+      if (!acceptTranscriptionResultsRef.current) {
+        return
+      }
+
+      setValue(buildSpeechText(speechBaseTextRef.current, transcript))
+    } catch (error) {
+      setSpeechError(resolveTranscriptionError(error))
+    } finally {
+      setIsTranscribing(false)
+    }
+  }, [buildSpeechText])
+
+  const startMediaRecorder = useCallback(async () => {
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      setSpeechError("Microphone access requires HTTPS.")
+      return
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof window.MediaRecorder === "undefined") {
+      setSpeechError("Speech-to-text is not supported in this browser.")
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setSpeechError("Microphone permission was denied.")
+      return
+    }
+
+    const recorderConstructor = window.MediaRecorder
+    const mimeType = chooseRecorderMimeType(recorderConstructor)
+    let recorder: MediaRecorder
+
+    try {
+      recorder = mimeType
+        ? new recorderConstructor(stream, { mimeType })
+        : new recorderConstructor(stream)
+    } catch {
+      stream.getTracks().forEach(track => track.stop())
+      setSpeechError("Unable to start recording with this browser.")
+      return
+    }
+
+    speechBaseTextRef.current = value
+    speechFinalTextRef.current = ""
+    acceptSpeechResultsRef.current = false
+    acceptTranscriptionResultsRef.current = true
+    recordedChunksRef.current = []
+    mediaStreamRef.current = stream
+    mediaRecorderRef.current = recorder
+    recordingModeRef.current = "media-recorder"
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunksRef.current.push(event.data)
+      }
+    }
+
+    recorder.onerror = () => {
+      setSpeechError("Recording failed. Please try again.")
+      setIsRecording(false)
+      recordingModeRef.current = null
+      mediaRecorderRef.current = null
+      recordedChunksRef.current = []
+      stopMediaStream()
+    }
+
+    recorder.onstop = () => {
+      const shouldTranscribe = acceptTranscriptionResultsRef.current
+      const chunks = recordedChunksRef.current
+      recordedChunksRef.current = []
+
+      setIsRecording(false)
+      recordingModeRef.current = null
+      mediaRecorderRef.current = null
+      stopMediaStream()
+
+      if (!shouldTranscribe) {
+        return
+      }
+
+      const blobType = recorder.mimeType || "audio/webm"
+      const audioBlob = new Blob(chunks, { type: blobType })
+      void transcribeAudioBlob(audioBlob)
+    }
+
+    recorder.start()
+    setIsRecording(true)
+  }, [stopMediaStream, transcribeAudioBlob, value])
+
+  useEffect(() => {
+    return () => {
+      acceptSpeechResultsRef.current = false
+      acceptTranscriptionResultsRef.current = false
+
+      const recognition = recognitionRef.current
+      if (recognition) {
+        recognition.onresult = null
+        recognition.onerror = null
+        recognition.onend = null
+        recognition.abort()
+      }
+      recognitionRef.current = null
+
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop()
+      }
+      mediaRecorderRef.current = null
+      stopMediaStream()
+    }
+  }, [stopMediaStream])
+
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
-    if ((!trimmed && files.length === 0) || isLoading) return
+    if ((!trimmed && files.length === 0) || isLoading || isTranscribing) return
+
+    setSpeechError(null)
+    acceptSpeechResultsRef.current = false
+    acceptTranscriptionResultsRef.current = false
+    recognitionRef.current?.stop()
+
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop()
+    }
+
+    recordingModeRef.current = null
+    setIsRecording(false)
     onSend({ text: trimmed, files })
     setValue("")
     setFiles([])
@@ -48,7 +364,55 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
-  }, [value, files, isLoading, onSend])
+  }, [value, files, isLoading, isTranscribing, onSend])
+
+  const handleMicClick = () => {
+    if (isLoading || isTranscribing) {
+      return
+    }
+
+    setSpeechError(null)
+
+    if (isRecording) {
+      if (recordingModeRef.current === "media-recorder") {
+        const recorder = mediaRecorderRef.current
+        if (recorder && recorder.state !== "inactive") {
+          recorder.stop()
+        } else {
+          setIsRecording(false)
+          recordingModeRef.current = null
+        }
+        return
+      }
+
+      acceptSpeechResultsRef.current = false
+      recognitionRef.current?.stop()
+      setIsRecording(false)
+      recordingModeRef.current = null
+      return
+    }
+
+    const recognition = ensureRecognition()
+    if (recognition) {
+      speechBaseTextRef.current = value
+      speechFinalTextRef.current = ""
+      acceptSpeechResultsRef.current = true
+      acceptTranscriptionResultsRef.current = false
+      recordingModeRef.current = "speech-api"
+
+      try {
+        recognition.start()
+        setIsRecording(true)
+      } catch {
+        setSpeechError("Unable to start recording. Check microphone permissions for this site.")
+        setIsRecording(false)
+        recordingModeRef.current = null
+      }
+      return
+    }
+
+    void startMediaRecorder()
+  }
 
   const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const incoming = event.target.files
@@ -204,11 +568,29 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
 
           <button
             type="button"
-            onClick={handleSend}
-            disabled={!hasInput || isLoading}
+            onClick={handleMicClick}
+            disabled={isLoading || isTranscribing}
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center transition-colors",
-              hasInput && !isLoading
+              isRecording
+                ? "text-primary hover:text-primary/80"
+                : isLoading || isTranscribing
+                  ? "text-muted-foreground/30"
+                  : "text-muted-foreground hover:text-foreground"
+            )}
+            aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+            title={isTranscribing ? "Transcribing..." : (isRecording ? "Stop recording" : "Start recording")}
+          >
+            {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-5 w-5" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!hasInput || isLoading || isTranscribing}
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center transition-colors",
+              hasInput && !isLoading && !isTranscribing
                 ? "text-primary hover:text-primary/80"
                 : "text-muted-foreground/30"
             )}
@@ -216,6 +598,25 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
             <SendHorizontal className="h-5 w-5" />
           </button>
         </div>
+
+        {isRecording && (
+          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
+            <Mic className="h-3 w-3 text-primary" />
+            <span className="text-[11px] text-primary">Listening...</span>
+          </div>
+        )}
+
+        {isTranscribing && (
+          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Transcribing...</span>
+          </div>
+        )}
+
+        {speechError && (
+          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
+            <span className="text-[11px] text-destructive/90">{speechError}</span>
+          </div>
+        )}
 
         {webSearch && (
           <div className="ml-1 mt-1.5 flex items-center gap-1.5">

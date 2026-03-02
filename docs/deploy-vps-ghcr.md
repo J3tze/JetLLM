@@ -2,6 +2,8 @@
 
 This flow deploys JetLLM from a prebuilt image such as `ghcr.io/<owner>/jetllm:latest`.
 
+If your source of truth is GitLab (not GitHub), use `docs/deploy-vps-gitlab.md` instead.
+
 ## 1) Publish images to GHCR
 
 This repository now includes `.github/workflows/docker-publish.yml`.

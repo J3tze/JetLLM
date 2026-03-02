@@ -2,6 +2,12 @@
 
 This file provides guidance to coding agents working in this repository.
 
+## Update rule (1 minute)
+When you finish a unit of work (fix, refactor, investigation, decision):
+- Add 1 bullet under **Today / Recent**
+- Include: what changed, where, and why
+- If you didn’t change code, still log the conclusion
+
 ## Project Overview
 
 JetLLM is a multi-provider LLM web UI with streaming chat, memory, RAG, web search, code execution, and image generation. The UI is AMOLED-first with customizable accents and chat appearance, and includes email/password authentication with cookie-based sessions.
@@ -83,9 +89,11 @@ Path alias: `@` maps to `src/`.
 
 - Container image uses `node:20-bookworm-slim` (glibc-based) to avoid musl/native-addon issues with `better-sqlite3` and `sqlite-vec`.
 - Runtime process starts as root only for startup permission fix, then drops privileges to `nextjs` via `gosu` in `docker-entrypoint.sh`.
+- Startup permission fix is targeted to `DB_PATH` and SQLite sidecar files (`-wal`, `-shm`) to avoid recursive `chown` on every boot.
 - Compose persists SQLite at `/app/data` and sets `DB_PATH=/app/data/jetllm.db`.
 - `next/font/google` is not used; font CSS variables are defined locally in `src/app/globals.css` so image builds do not depend on Google Fonts network access.
-- Next standalone tracing may miss optional platform packages for `sqlite-vec`; Dockerfile explicitly copies `sqlite-vec*` packages from deps into runner so vector search stays available in container.
+- Next standalone tracing may miss optional platform packages for `sqlite-vec`; Dockerfile explicitly copies `sqlite-vec` plus `sqlite-vec-linux-*` packages from deps into runner so vector search stays available in container.
+- Dockerfile uses BuildKit cache mount for `npm ci` (`--mount=type=cache,target=/root/.npm`) to speed up repeat image builds.
 
 ## Chat Flow
 
@@ -145,6 +153,22 @@ Path alias: `@` maps to `src/`.
 - Deploy fallback for VPS auth/registry issues: sync repo snapshot to `/opt/jetllm`, normalize `docker-entrypoint.sh` line endings (`sed -i 's/\r$//'`), build `ghcr.io/j3tze/jetllm:latest` locally on VPS, and run `docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d --pull never`.
 - Production JetLLM route is `jet.dozzzer.com` behind Cloudflare and Nginx Proxy Manager (`/opt/open-webui/data/nginx/proxy_host/3.conf`) forwarding to `172.17.0.1:3000` with websocket headers and `proxy_buffering off` for streaming.
 - `jet.dozzzer.com` uses a dedicated Let's Encrypt certificate at `/opt/open-webui/letsencrypt/live/jet.dozzzer.com/` to satisfy Cloudflare Full (strict) and prevent edge `526` errors.
+- Restored chat markdown/code rendering in `src/components/chat/message-list.tsx` and `src/components/chat/code-block.tsx` by switching message text back to `react-markdown` + `remark-gfm` and re-enabling Shiki highlighting with plaintext fallback, fixing the regression where markdown formatting and fenced-code syntax highlighting no longer displayed.
+- Docker image optimization pass:
+  - Enabled BuildKit layer caching for `npm ci` and switched runner `COPY` commands to `--chown`/`--chmod` to avoid broad post-copy ownership rewrites.
+  - Limited copied `sqlite-vec` platform artifacts to Linux packages in the runner image.
+  - Replaced recursive startup `chown -R /app/data` with targeted writability checks for `DB_PATH` and SQLite sidecar files (`-wal`, `-shm`) to reduce container startup overhead on large volumes.
+- Added GitLab CI/CD pipeline support via `.gitlab-ci.yml`:
+  - `publish_image` builds/pushes image tags to GitLab Container Registry (`sha-*`, `latest`, release tag).
+  - `deploy_vps` SSHes to the VPS and redeploys `latest` image via compose pull/up (image-only; no VPS `git pull`).
+  - Added GitLab deployment guide at `docs/deploy-vps-gitlab.md` with required CI variables.
+- Ran `/status` (`git status --short --branch`) to snapshot local WIP on `master...origin/master`; current tracked edits are in Docker/chat rendering/deploy docs plus new `.gitlab-ci.yml` and `docs/deploy-vps-gitlab.md`, to keep collaboration handoff accurate.
+- Added chat speech-to-text support in `src/components/chat/chat-input.tsx` with a microphone button left of Send: uses browser `SpeechRecognition` when available and falls back to `MediaRecorder` upload/transcription for Firefox/unsupported browsers, so voice input works across major desktop browsers.
+- Added authenticated STT API route `src/app/api/speech/transcribe/route.ts` with provider fallback order (`groq` -> `openai` -> `custom`) against OpenAI-compatible `/audio/transcriptions`, defaulting to low-cost Groq when configured and returning actionable errors when no STT key is available.
+- Added targeted tests for speech transcription route behavior in `src/app/api/speech/transcribe/__tests__/route.test.ts` (auth guard, missing audio validation, Groq-first success, OpenAI fallback, and missing-provider handling) to keep regression coverage on the new voice path.
+- Investigated Codex quota warning mismatch (weekly warning vs `/status`): local session telemetry shows separate `primary` (300-minute) and `secondary` (10080-minute weekly) limits (for example `57%` used vs `79%` used), explaining why a weekly "25% left" warning can differ from `/status` output depending on which bucket is shown.
+- Checked current Codex usage snapshot from local session telemetry: `primary` (300-minute) is `58%` used (`42%` left, reset at `2026-03-02 16:57:18 +01:00`) and `secondary` weekly (10080-minute) is `79%` used (`21%` left, reset at `2026-03-05 00:33:40 +01:00`), so the active weekly headroom is about one-fifth.
+- Verified local Codex CLI capabilities (`codex --help`, `codex features list`) and found no built-in user config to enforce a hard "primary-window-only" throttle; usage control must be managed via model/effort choices or a local wrapper/check before launching sessions.
 
 ## Planning Docs
 

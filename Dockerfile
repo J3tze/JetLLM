@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM node:20-bookworm-slim AS base
 
 # Install dependencies only when needed.
@@ -10,13 +11,13 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Collect sqlite-vec platform packages so standalone output keeps vector extension support.
 FROM deps AS vecdeps
 RUN mkdir -p /vec-node-modules \
   && cp -R /app/node_modules/sqlite-vec /vec-node-modules/sqlite-vec \
-  && for d in /app/node_modules/sqlite-vec-*; do \
+  && for d in /app/node_modules/sqlite-vec-linux-*; do \
     if [ -d "$d" ]; then cp -R "$d" /vec-node-modules/; fi; \
   done
 
@@ -39,17 +40,15 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends gosu ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 nodejs \
-  && useradd --system --uid 1001 --gid 1001 nextjs
-
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=vecdeps /vec-node-modules ./node_modules
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && useradd --system --uid 1001 --gid 1001 nextjs \
   && mkdir -p /app/data \
-  && chown -R nextjs:nodejs /app
+  && chown nextjs:nodejs /app/data
+
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=vecdeps --chown=nextjs:nodejs /vec-node-modules ./node_modules
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 

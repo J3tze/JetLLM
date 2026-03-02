@@ -1,7 +1,9 @@
 "use client"
 
 import Image from "next/image"
-import { useState, useEffect, useRef, useCallback, useMemo, useId, type ReactNode } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, useId, isValidElement, type ReactNode } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { ChatMessage } from "./chat-message"
 import { ChevronDown, Globe, RotateCw, FileText } from "lucide-react"
 import { JetLLMLogo } from "@/components/jetllm-logo"
@@ -169,181 +171,6 @@ function renderFilePart(part: { mediaType: string; url: string; filename?: strin
       <span className="max-w-[240px] truncate">{label}</span>
     </a>
   )
-}
-
-function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  const pattern = /`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-  let index = 0
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index))
-    }
-
-    if (match[1]) {
-      nodes.push(
-        <code
-          key={`${keyPrefix}-code-${index}`}
-          className="rounded bg-black/35 px-1 py-0.5 text-[0.85em]"
-        >
-          {match[1]}
-        </code>
-      )
-    } else if (match[2] && match[3]) {
-      nodes.push(
-        <a
-          key={`${keyPrefix}-link-${index}`}
-          href={match[3]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-current underline break-all"
-        >
-          {match[2]}
-        </a>
-      )
-    }
-
-    lastIndex = pattern.lastIndex
-    index += 1
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex))
-  }
-
-  return nodes
-}
-
-function renderTextWithBreaks(text: string, keyPrefix: string): ReactNode[] {
-  return text.split("\n").map((line, index, arr) => (
-    <span key={`${keyPrefix}-line-${index}`}>
-      {renderInlineMarkdown(line, `${keyPrefix}-inline-${index}`)}
-      {index < arr.length - 1 ? <br /> : null}
-    </span>
-  ))
-}
-
-function renderMarkdownContent(text: string, keyPrefix: string): ReactNode[] {
-  const lines = text.split(/\r?\n/)
-  const nodes: ReactNode[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-
-    if (!line.trim()) {
-      i += 1
-      continue
-    }
-
-    const codeFence = line.match(/^```(\w+)?\s*$/)
-    if (codeFence) {
-      const language = codeFence[1] || "text"
-      const codeLines: string[] = []
-      i += 1
-      while (i < lines.length && !/^```/.test(lines[i])) {
-        codeLines.push(lines[i])
-        i += 1
-      }
-      if (i < lines.length && /^```/.test(lines[i])) {
-        i += 1
-      }
-      nodes.push(
-        <CodeBlock
-          key={`${keyPrefix}-codeblock-${nodes.length}`}
-          language={language}
-          code={codeLines.join("\n")}
-        />
-      )
-      continue
-    }
-
-    const heading = line.match(/^(#{1,3})\s+(.+)$/)
-    if (heading) {
-      const level = heading[1].length
-      const content = heading[2]
-      if (level === 1) {
-        nodes.push(
-          <h1 key={`${keyPrefix}-h1-${nodes.length}`} className="my-1 text-base font-semibold">
-            {renderInlineMarkdown(content, `${keyPrefix}-h1-inline-${nodes.length}`)}
-          </h1>
-        )
-      } else if (level === 2) {
-        nodes.push(
-          <h2 key={`${keyPrefix}-h2-${nodes.length}`} className="my-1 text-base font-semibold">
-            {renderInlineMarkdown(content, `${keyPrefix}-h2-inline-${nodes.length}`)}
-          </h2>
-        )
-      } else {
-        nodes.push(
-          <h3 key={`${keyPrefix}-h3-${nodes.length}`} className="my-1 text-sm font-semibold">
-            {renderInlineMarkdown(content, `${keyPrefix}-h3-inline-${nodes.length}`)}
-          </h3>
-        )
-      }
-      i += 1
-      continue
-    }
-
-    if (/^[-*]\s+/.test(line)) {
-      const items: string[] = []
-      while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^[-*]\s+/, ""))
-        i += 1
-      }
-      nodes.push(
-        <ul key={`${keyPrefix}-ul-${nodes.length}`} className="my-1 list-disc pl-5">
-          {items.map((item, idx) => (
-            <li key={`${keyPrefix}-ul-item-${idx}`} className="my-0.5">
-              {renderInlineMarkdown(item, `${keyPrefix}-ul-inline-${idx}`)}
-            </li>
-          ))}
-        </ul>
-      )
-      continue
-    }
-
-    if (/^\d+\.\s+/.test(line)) {
-      const items: string[] = []
-      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\d+\.\s+/, ""))
-        i += 1
-      }
-      nodes.push(
-        <ol key={`${keyPrefix}-ol-${nodes.length}`} className="my-1 list-decimal pl-5">
-          {items.map((item, idx) => (
-            <li key={`${keyPrefix}-ol-item-${idx}`} className="my-0.5">
-              {renderInlineMarkdown(item, `${keyPrefix}-ol-inline-${idx}`)}
-            </li>
-          ))}
-        </ol>
-      )
-      continue
-    }
-
-    const paragraphLines: string[] = []
-    while (
-      i < lines.length
-      && lines[i].trim()
-      && !/^```/.test(lines[i])
-      && !/^(#{1,3})\s+/.test(lines[i])
-      && !/^[-*]\s+/.test(lines[i])
-      && !/^\d+\.\s+/.test(lines[i])
-    ) {
-      paragraphLines.push(lines[i])
-      i += 1
-    }
-    nodes.push(
-      <p key={`${keyPrefix}-p-${nodes.length}`} className="my-1">
-        {renderTextWithBreaks(paragraphLines.join("\n"), `${keyPrefix}-p-inline-${nodes.length}`)}
-      </p>
-    )
-  }
-
-  return nodes
 }
 
 function WebSearchResultContent({ outputText, parsedOutput }: WebSearchResultContentProps) {
@@ -647,7 +474,31 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
                           [&_a]:text-current [&_a]:underline [&_a]:break-all
                         "
                       >
-                        {renderMarkdownContent(part.text, `msg-${message.id}-part-${i}`)}
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            pre: ({ children }) => {
+                              const codeChild = Array.isArray(children) ? children[0] : children
+                              if (!isValidElement(codeChild)) {
+                                return <pre>{children}</pre>
+                              }
+                              const childProps = codeChild.props as { className?: string; children?: ReactNode }
+                              const match = childProps.className?.match(/language-([\w-]+)/)
+                              const language = match?.[1] ?? "text"
+                              const code = typeof childProps.children === "string"
+                                ? childProps.children
+                                : Array.isArray(childProps.children)
+                                  ? childProps.children.join("")
+                                  : String(childProps.children ?? "")
+                              return <CodeBlock language={language} code={code.trimEnd()} />
+                            },
+                            code: ({ className, children, ...props }) => (
+                              <code className={className} {...props}>{children}</code>
+                            ),
+                          }}
+                        >
+                          {part.text}
+                        </ReactMarkdown>
                       </div>
                     )
                   }
