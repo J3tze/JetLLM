@@ -139,6 +139,13 @@ Path alias: `@` maps to `src/`.
   - Added explicit `sqlite-vec` platform package copy into runner image to keep RAG vector extension loading in standalone runtime.
   - Verified compose startup, API writes, and persisted SQLite files under containerized `/app/data`.
 
+## Recent Updates (2026-03-02)
+
+- VPS manual deploy uses SSH key `C:\Users\Jetze\Documents\SSH Keys\id_ed25519`; `C:\Users\Jetze\.ssh\id_ed25519` is a different keypair and may not be authorized on the Hetzner host.
+- Deploy fallback for VPS auth/registry issues: sync repo snapshot to `/opt/jetllm`, normalize `docker-entrypoint.sh` line endings (`sed -i 's/\r$//'`), build `ghcr.io/j3tze/jetllm:latest` locally on VPS, and run `docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d --pull never`.
+- Production JetLLM route is `jet.dozzzer.com` behind Cloudflare and Nginx Proxy Manager (`/opt/open-webui/data/nginx/proxy_host/3.conf`) forwarding to `172.17.0.1:3000` with websocket headers and `proxy_buffering off` for streaming.
+- `jet.dozzzer.com` uses a dedicated Let's Encrypt certificate at `/opt/open-webui/letsencrypt/live/jet.dozzzer.com/` to satisfy Cloudflare Full (strict) and prevent edge `526` errors.
+
 ## Planning Docs
 
 - `docs/plans/2026-02-24-jetllm-design.md`
