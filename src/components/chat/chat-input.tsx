@@ -122,7 +122,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   const acceptTranscriptionResultsRef = useRef(false)
 
   const hasInput = value.trim().length > 0 || files.length > 0
-  const iconButtonClass = "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+  const iconButtonClass = "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 
   const buildSpeechText = useCallback((baseText: string, spokenText: string) => {
     const trimmedBase = baseText.trim()
@@ -461,8 +461,8 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   }
 
   return (
-    <div className="sticky bottom-0 z-20 shrink-0 px-4 pb-4 pt-2 safe-area-bottom bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-sm">
-      <div className="w-full max-w-3xl mx-auto">
+    <div className="sticky bottom-0 z-20 shrink-0 px-2 pb-3 pt-2 safe-area-bottom bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-sm sm:px-4 sm:pb-4">
+      <div className="mx-auto w-full max-w-4xl">
         <input
           ref={fileInputRef}
           type="file"
@@ -496,7 +496,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
           </div>
         ) : null}
 
-        <div className="flex items-end gap-1.5 rounded-2xl border border-border/50 bg-background/80 px-2.5 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
+        <div className="flex items-end gap-2 rounded-[1.35rem] border border-border/50 bg-background/80 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
           <Popover open={toolsOpen} onOpenChange={setToolsOpen}>
             <PopoverTrigger asChild>
               <button
@@ -562,7 +562,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
               onInput={handleInput}
               placeholder="Type a message..."
               rows={1}
-              className="min-h-[40px] max-h-[180px] flex-1 resize-none border-0 bg-transparent px-1.5 py-2 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="min-h-[48px] max-h-[180px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
 
             <button

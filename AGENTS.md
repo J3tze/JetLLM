@@ -183,6 +183,8 @@ Path alias: `@` maps to `src/`.
 - Hardened the mirrored `deploy` skills at `C:\Users\Jetze\.config\opencode\skills\deploy\SKILL.md` and `C:\Users\Jetze\.codex\skills\user\deploy\SKILL.md` to check `glab` auth first and use `GLAB_TOKEN`/`GITLAB_TOKEN` env fallback for private-pipeline polling, while explicitly avoiding hardcoded PATs in skill files.
 - Stored `GITLAB_TOKEN` and `GLAB_TOKEN` as persistent user environment variables on the local machine (without saving secrets in repo files) so GitLab private-pipeline checks can authenticate across new shell sessions.
 - Trimmed `AGENTS.md` recent notes to keep this log focused on project-relevant engineering/deploy changes rather than local desktop customization entries.
+- Replaced PWA icon assets in `public/icons/icon-192.svg` and `public/icons/icon-512.svg` with the JetLLM green paper-plane mark so installed app icons on Android match JetLLM branding instead of the previous blue "J" placeholder.
+- Widened mobile chat controls by increasing composer sizing in `src/components/chat/chat-input.tsx` and removing mobile selector width constraints in `src/components/chat/chat-panel.tsx` + `src/components/chat/model-selector.tsx`, so the top provider/model controls use available screen width without going off-screen.
 
 ## Planning Docs
 

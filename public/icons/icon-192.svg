@@ -1,4 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="jetllm-plane-192" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
   <rect width="192" height="192" fill="#000000" rx="32"/>
-  <text x="96" y="112" text-anchor="middle" fill="#3b82f6" font-family="system-ui, sans-serif" font-weight="700" font-size="64">J</text>
+  <g transform="translate(-9 -9) scale(2)">
+    <path d="M85 20 L70 80 L50 60 L20 70 Z" fill="url(#jetllm-plane-192)"/>
+    <path d="M85 20 L50 60 L50 85 Z" fill="#22c55e" opacity="0.45"/>
+  </g>
 </svg>

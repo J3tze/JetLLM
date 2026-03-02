@@ -98,9 +98,9 @@ export function ModelSelector({
   const showSearchable = models.length > 10
 
   return (
-    <div className="flex w-full max-w-[19rem] min-w-0 items-center gap-1.5 sm:w-auto sm:max-w-none sm:flex-initial sm:gap-2">
+    <div className="flex w-full min-w-0 flex-1 items-center gap-1.5 sm:w-auto sm:flex-initial sm:gap-2">
       <Select value={provider} onValueChange={onProviderChange}>
-        <SelectTrigger className="h-9 w-[7.5rem] min-w-0 shrink-0 text-xs !border-border !bg-transparent sm:w-auto sm:min-w-[140px]">
+        <SelectTrigger className="h-9 w-[clamp(6.75rem,38vw,10rem)] min-w-0 shrink-0 text-xs !border-border !bg-transparent sm:w-auto sm:min-w-[140px]">
           <SelectValue placeholder="Provider" />
         </SelectTrigger>
         <SelectContent>
