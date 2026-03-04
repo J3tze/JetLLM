@@ -515,16 +515,24 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                 <p className="text-xs font-medium text-muted-foreground">Tools</p>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
                   onClick={handleUploadClick}
                 >
-                  <span className="flex items-center gap-2">
-                    <Paperclip className="h-4 w-4 text-muted-foreground" />
-                    Upload Files
-                  </span>
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  Upload Files
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground sm:hidden"
+                  onClick={handleMicClick}
+                  disabled={isLoading || isTranscribing}
+                  aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+                >
+                  {isRecording ? <Square className="h-4 w-4 text-primary" /> : <Mic className="h-4 w-4 text-muted-foreground" />}
+                  {isRecording ? "Stop Listening" : "Speech to Text"}
                 </button>
                 {searchAvailable ? (
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between rounded-md px-2 py-1.5">
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-muted-foreground" />
                       <Label htmlFor="web-search" className="cursor-pointer text-sm">Web Search</Label>
@@ -548,7 +556,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
               type="button"
               onClick={handleUploadClick}
               disabled={isLoading}
-              className={iconButtonClass}
+              className={cn(iconButtonClass, "hidden sm:flex")}
               aria-label="Attach files"
             >
               <Paperclip className="h-4 w-4" />
@@ -571,6 +579,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
               disabled={isLoading || isTranscribing}
               className={cn(
                 iconButtonClass,
+                "hidden sm:flex",
                 isRecording
                   ? "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
                   : isLoading || isTranscribing

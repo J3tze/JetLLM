@@ -1,8 +1,8 @@
 "use client"
 
 import Image from "next/image"
-import { useState, useEffect, useRef, useCallback, useMemo, useId, isValidElement, type ReactNode } from "react"
-import ReactMarkdown from "react-markdown"
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
+import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatMessage } from "./chat-message"
 import { ChevronDown, Globe, RotateCw, FileText } from "lucide-react"
@@ -170,6 +170,57 @@ function renderFilePart(part: { mediaType: string; url: string; filename?: strin
         <FileText className="h-3.5 w-3.5 text-muted-foreground" />
       <span className="max-w-[240px] truncate">{label}</span>
     </a>
+  )
+}
+
+function parseCodeLanguage(className?: string): string | null {
+  if (!className) return null
+  const match = className.match(/language-([^\s]+)/)
+  return match?.[1] ?? null
+}
+
+const markdownComponents: Components = {
+  h1: ({ children }) => <h1 className="my-1 text-base font-semibold">{children}</h1>,
+  h2: ({ children }) => <h2 className="my-1 text-base font-semibold">{children}</h2>,
+  h3: ({ children }) => <h3 className="my-1 text-sm font-semibold">{children}</h3>,
+  p: ({ children }) => <p className="my-1">{children}</p>,
+  ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
+  ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
+  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  a: ({ href, children }) => {
+    const isExternal = typeof href === "string" && /^https?:\/\//i.test(href)
+    return (
+      <a
+        href={href}
+        target={isExternal ? "_blank" : undefined}
+        rel={isExternal ? "noopener noreferrer" : undefined}
+        className="text-current underline break-all"
+      >
+        {children}
+      </a>
+    )
+  },
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children }) => {
+    const language = parseCodeLanguage(className)
+
+    if (!language) {
+      return (
+        <code className={cn("rounded bg-black/35 px-1 py-0.5 text-[0.85em]", className)}>
+          {children}
+        </code>
+      )
+    }
+
+    return <CodeBlock language={language} code={String(children).replace(/\n$/, "")} />
+  },
+}
+
+function MarkdownText({ text }: { text: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      {text}
+    </ReactMarkdown>
   )
 }
 
@@ -463,42 +514,11 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
                         key={i}
                         className="
                           text-sm max-w-none leading-relaxed
-                          [&>p]:my-1
-                          [&>ul]:my-1 [&>ol]:my-1
-                          [&>ul>li]:my-0.5 [&>ol>li]:my-0.5
-                          [&_pre]:my-2 [&_pre]:rounded-lg [&_pre]:bg-black/30
                           [&_code]:text-[0.85em]
-                          [&_h1]:my-1 [&_h1]:text-base [&_h1]:font-semibold
-                          [&_h2]:my-1 [&_h2]:text-base [&_h2]:font-semibold
-                          [&_h3]:my-1 [&_h3]:text-sm [&_h3]:font-semibold
                           [&_a]:text-current [&_a]:underline [&_a]:break-all
                         "
                       >
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            pre: ({ children }) => {
-                              const codeChild = Array.isArray(children) ? children[0] : children
-                              if (!isValidElement(codeChild)) {
-                                return <pre>{children}</pre>
-                              }
-                              const childProps = codeChild.props as { className?: string; children?: ReactNode }
-                              const match = childProps.className?.match(/language-([\w-]+)/)
-                              const language = match?.[1] ?? "text"
-                              const code = typeof childProps.children === "string"
-                                ? childProps.children
-                                : Array.isArray(childProps.children)
-                                  ? childProps.children.join("")
-                                  : String(childProps.children ?? "")
-                              return <CodeBlock language={language} code={code.trimEnd()} />
-                            },
-                            code: ({ className, children, ...props }) => (
-                              <code className={className} {...props}>{children}</code>
-                            ),
-                          }}
-                        >
-                          {part.text}
-                        </ReactMarkdown>
+                        <MarkdownText text={part.text} />
                       </div>
                     )
                   }

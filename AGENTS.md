@@ -186,6 +186,15 @@ Path alias: `@` maps to `src/`.
 - Replaced PWA icon assets in `public/icons/icon-192.svg` and `public/icons/icon-512.svg` with the JetLLM green paper-plane mark so installed app icons on Android match JetLLM branding instead of the previous blue "J" placeholder.
 - Widened mobile chat controls by increasing composer sizing in `src/components/chat/chat-input.tsx` and removing mobile selector width constraints in `src/components/chat/chat-panel.tsx` + `src/components/chat/model-selector.tsx`, so the top provider/model controls use available screen width without going off-screen.
 
+## Recent Updates (2026-03-04)
+
+- Chat markdown rendering now uses `react-markdown` + `remark-gfm` in `src/components/chat/message-list.tsx` instead of manual regex parsing helpers.
+- Markdown component overrides preserve prior chat look/spacing while improving correctness: fenced code goes through `CodeBlock`, inline code stays inline, and external links use secure `target="_blank"` + `rel="noopener noreferrer"`.
+- `src/components/chat/code-block.tsx` now adds Shiki syntax highlighting via an async cached highlighter singleton, with graceful fallback to plain `<pre><code>` when highlight is unavailable or fails.
+- Unknown/unsupported code fence languages are normalized and fall back to `plaintext` highlighting rather than breaking rendering.
+- Shiki code block backgrounds are post-processed to a slightly transparent black (`rgba(0, 0, 0, 0.35)`) to match JetLLM's AMOLED styling.
+- Added focused markdown rendering tests in `src/components/chat/__tests__/message-list.markdown.test.tsx` for headings/lists/links, fenced code-to-`CodeBlock` routing, and inline code behavior.
+
 ## Planning Docs
 
 - `docs/plans/2026-02-24-jetllm-design.md`
