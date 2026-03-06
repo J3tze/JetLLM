@@ -13,8 +13,20 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   together: "https://api.together.xyz/v1",
 }
 
-export function getModel(providerId: string, modelId: string): LanguageModel {
-  const config = getSetting<ProviderConfig>(`provider:${providerId}`)
+type ProviderModelOptions = {
+  config?: ProviderConfig | null
+}
+
+function resolveProviderConfig(providerId: string, options?: ProviderModelOptions): ProviderConfig | null {
+  if (options && "config" in options) {
+    return options.config ?? null
+  }
+
+  return getSetting<ProviderConfig>(`provider:${providerId}`)
+}
+
+export function getModel(providerId: string, modelId: string, options?: ProviderModelOptions): LanguageModel {
+  const config = resolveProviderConfig(providerId, options)
   if (!config?.apiKey) {
     throw new Error(`No API key configured for provider: ${providerId}`)
   }
@@ -65,8 +77,8 @@ export function getModel(providerId: string, modelId: string): LanguageModel {
   }
 }
 
-export function getEmbeddingModel(providerId: string, modelId: string): EmbeddingModel {
-  const config = getSetting<ProviderConfig>(`provider:${providerId}`)
+export function getEmbeddingModel(providerId: string, modelId: string, options?: ProviderModelOptions): EmbeddingModel {
+  const config = resolveProviderConfig(providerId, options)
   if (!config?.apiKey) {
     throw new Error(`No API key configured for provider: ${providerId}`)
   }

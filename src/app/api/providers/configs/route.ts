@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSetting, setSetting } from "@/lib/settings"
+import { getProviderSettings, getSetting, setSetting } from "@/lib/settings"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
 import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
@@ -26,9 +26,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const providerIds = PROVIDER_REGISTRY.map(provider => provider.id)
+    const providerSettings = getProviderSettings(providerIds)
     const configs: Record<string, { hasKey: boolean; baseUrl?: string }> = {}
     for (const p of PROVIDER_REGISTRY) {
-      const config = getSetting<{ apiKey?: string; baseUrl?: string }>(`provider:${p.id}`)
+      const config = providerSettings[p.id]
       configs[p.id] = {
         hasKey: !!config?.apiKey,
         baseUrl: config?.baseUrl,

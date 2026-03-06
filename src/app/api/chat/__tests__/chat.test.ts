@@ -37,6 +37,11 @@ vi.mock("@/lib/auth-server", () => ({
   getCurrentUserFromRequest: (...args: unknown[]) => mockGetCurrentUserFromRequest(...args),
 }))
 
+const mockGetSettings = vi.fn()
+vi.mock("@/lib/settings", () => ({
+  getSettings: (...args: unknown[]) => mockGetSettings(...args),
+}))
+
 describe("POST /api/chat", () => {
   const mockModel = { modelId: "mock-model" }
 
@@ -53,6 +58,7 @@ describe("POST /api/chat", () => {
     ])
     mockTool.mockImplementation((definition: unknown) => definition)
     mockExtractMemories.mockResolvedValue(undefined)
+    mockGetSettings.mockReturnValue({})
     mockGetCurrentUserFromRequest.mockReturnValue({
       id: "user-1",
       email: "user@example.com",
@@ -106,6 +112,10 @@ describe("POST /api/chat", () => {
 
   it("calls getModel with the correct provider and model", async () => {
     const { POST } = await import("../route")
+    const providerConfig = { apiKey: "sk-anthropic" }
+    mockGetSettings.mockReturnValue({
+      "provider:anthropic": providerConfig,
+    })
 
     const req = createRequest({
       messages: [{ role: "user", content: "Hello" }],
@@ -115,7 +125,32 @@ describe("POST /api/chat", () => {
 
     await POST(req)
 
-    expect(mockGetModel).toHaveBeenCalledWith("anthropic", "claude-sonnet-4-20250514")
+    expect(mockGetModel).toHaveBeenCalledWith(
+      "anthropic",
+      "claude-sonnet-4-20250514",
+      { config: providerConfig }
+    )
+  })
+
+  it("loads route settings in a single batched lookup", async () => {
+    const { POST } = await import("../route")
+
+    const req = createRequest({
+      messages: [{ role: "user", content: "Hello" }],
+      provider: "openai",
+      model: "gpt-4o",
+    })
+
+    await POST(req)
+
+    expect(mockGetSettings).toHaveBeenCalledWith([
+      "chat:systemPrompt",
+      "chat:userName",
+      "memory:enabled",
+      "rag:model",
+      "search:tavilyKey",
+      "provider:openai",
+    ])
   })
 
   it("uses conversation system prompt when conversationId is provided", async () => {

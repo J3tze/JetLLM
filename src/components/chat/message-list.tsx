@@ -483,7 +483,7 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
         className="scrollbar-none min-h-0 flex-1 overflow-y-auto"
         ref={scrollAreaRef}
       >
-        <div className="max-w-3xl mx-auto py-6 space-y-2">
+        <div className="mx-auto max-w-3xl px-3 py-6 space-y-3 sm:px-4">
           {visibleMessages.map((message) => (
             <ChatMessage
               key={message.id}

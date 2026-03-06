@@ -195,6 +195,24 @@ Path alias: `@` maps to `src/`.
 - Shiki code block backgrounds are post-processed to a slightly transparent black (`rgba(0, 0, 0, 0.35)`) to match JetLLM's AMOLED styling.
 - Added focused markdown rendering tests in `src/components/chat/__tests__/message-list.markdown.test.tsx` for headings/lists/links, fenced code-to-`CodeBlock` routing, and inline code behavior.
 
+## Recent Updates (2026-03-05)
+
+- Analyzed performance hot paths across `src/app/api/chat/route.ts`, `src/app/api/settings/route.ts`, `src/components/chat/*`, and settings/provider flows to identify the highest-value optimization targets before making changes: batch settings/provider reads, reduce attachment/base64 overhead, trim document list payloads, and memoize expensive chat rendering work.
+- Added optimization implementation plan at `docs/plans/2026-03-05-optimization-plan.md` so the recommended performance and maintainability work is tracked alongside the existing feature plans.
+
+## Recent Updates (2026-03-06)
+
+- Reauthenticated the local GitHub CLI account with `gh auth refresh`, confirmed `gh auth status` now reports a valid `github.com` login again, and noted that this repository itself still uses the GitLab SSH remote (`git@gitlab.com:J3tze/JetLLM.git`) so GitHub auth is separate from this repo's origin.
+- Rechecked the local GitHub CLI state after manual browser authorization and confirmed `gh auth status` shows the `github.com` account `J3tze` is logged in, active, and holding the default `repo`, `read:org`, and `gist` scopes over keyring-backed auth.
+- Reviewed the optimization plan in `docs/plans/2026-03-05-optimization-plan.md` against the current server/client hot paths and concluded Tasks 1, 2, 4, 5, and 6 are well-founded, while Task 3 needs an explicit transport redesign because AI SDK file inputs still serialize to data URLs and Task 7 should focus on insert/select and transaction hotspots in `src/lib/conversations.ts`, `src/lib/projects.ts`, `src/lib/memory.ts`, and `src/lib/auth.ts`.
+- Updated `docs/plans/2026-03-05-optimization-plan.md` to split client bootstrap work into settings/provider-summary and provider-model caching tracks, add server-side provider-config batching, move project document payload trimming earlier, and reframe attachment work around guardrails plus a later transport redesign so the execution order better matches current codebase risk and payoff.
+- Implemented Task 1 server-side batching across `src/lib/settings.ts`, `src/app/api/settings/route.ts`, `src/app/api/providers/configs/route.ts`, `src/app/api/chat/route.ts`, `src/lib/providers/index.ts`, `src/lib/search/tavily.ts`, `src/lib/rag/embeddings.ts`, and `src/lib/rag/search.ts` so hot paths reuse preloaded settings/provider config per request instead of repeatedly fetching individual keys, with regression coverage extended in the related settings/chat/provider route and RAG search tests.
+- Refined chat bubble presentation in `src/components/chat/chat-message.tsx` and `src/components/chat/message-list.tsx` so the flat, minimal, and full styles use cleaner card geometry, better alignment, subtle gloss/shadow depth, and less awkward full-width user slabs, which makes the conversation UI look more polished without changing the existing bubble-style setting model.
+- Softened the updated chat bubble geometry in `src/components/chat/chat-message.tsx` by increasing corner radii across the flat, minimal, and full variants so the conversation surfaces feel rounder and less severe without altering the existing style modes.
+- Increased the chat bubble radii again in `src/components/chat/chat-message.tsx` after visual review feedback so the flat, minimal, and full variants read clearly rounded instead of only subtly softened.
+- Added transparency sliders to the chat theme color controls in `src/components/settings/chat-theme-picker.tsx` for user bubble, assistant bubble, and assistant border colors, storing alpha directly in the saved color values so theme customization can produce semi-transparent surfaces without changing the settings schema.
+- Extended the chat theme transparency controls in `src/components/settings/chat-theme-picker.tsx` to cover chat background as well, so all major surface colors in the chat theme picker can be softened without making text colors harder to read.
+
 ## Planning Docs
 
 - `docs/plans/2026-02-24-jetllm-design.md`
@@ -205,3 +223,4 @@ Path alias: `@` maps to `src/`.
 - `docs/plans/2026-02-27-projects-rag-plan.md`
 - `docs/plans/2026-02-27-web-search-design.md`
 - `docs/plans/2026-02-27-web-search-plan.md`
+- `docs/plans/2026-03-05-optimization-plan.md`

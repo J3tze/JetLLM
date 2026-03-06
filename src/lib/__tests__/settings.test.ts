@@ -83,4 +83,27 @@ describe("Settings Service", () => {
       expect(settings.getAll()).toEqual({})
     })
   })
+
+  describe("getManySettings", () => {
+    it("returns only the requested settings", () => {
+      settings.set("a", "hello")
+      settings.set("b", { nested: true })
+      settings.set("c", "ignored")
+
+      const selected = settings.getMany(["a", "b"])
+
+      expect(selected).toEqual({
+        a: "hello",
+        b: { nested: true },
+      })
+    })
+
+    it("deduplicates keys and ignores blanks", () => {
+      settings.set("a", "hello")
+
+      const selected = settings.getMany(["a", "a", " ", ""])
+
+      expect(selected).toEqual({ a: "hello" })
+    })
+  })
 })

@@ -12,6 +12,10 @@ const SUMMARY_CONTENT_LENGTH = 220
 const DEFAULT_LIMIT = 5
 const TIMEOUT_MS = 10000
 
+type SearchWebOptions = {
+  apiKey?: string | null
+}
+
 function normalizeSnippet(text: string): string {
   return text
     .replace(/\r?\n+/g, " ")
@@ -34,8 +38,12 @@ function summarizeSnippet(text: string): string {
   return cutoff.trim() + "..."
 }
 
-export async function searchWeb(query: string, limit: number = DEFAULT_LIMIT): Promise<SearchResult[]> {
-  const apiKey = getSetting<string>("search:tavilyKey")
+export async function searchWeb(
+  query: string,
+  limit: number = DEFAULT_LIMIT,
+  options: SearchWebOptions = {}
+): Promise<SearchResult[]> {
+  const apiKey = options.apiKey ?? getSetting<string>("search:tavilyKey")
   if (!apiKey) {
     throw new Error("Tavily API key not configured")
   }

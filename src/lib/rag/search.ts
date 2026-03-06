@@ -1,4 +1,4 @@
-import { embedSingle } from "./embeddings"
+import { embedSingle, type EmbeddingModelConfig } from "./embeddings"
 import { getRawDb } from "@/lib/db"
 
 export type SearchResult = {
@@ -18,12 +18,13 @@ export type SearchResult = {
 export async function searchDocuments(
   projectId: string,
   query: string,
-  topK = 5
+  topK = 5,
+  options: { embeddingConfig?: EmbeddingModelConfig } = {}
 ): Promise<SearchResult[]> {
   const safeTopK = Number.isFinite(topK)
     ? Math.max(1, Math.min(20, Math.trunc(topK)))
     : 5
-  const queryEmbedding = await embedSingle(query)
+  const queryEmbedding = await embedSingle(query, options.embeddingConfig)
   const sqlite = getRawDb()
 
   const results = sqlite

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { setSetting, getAllSettings } from "@/lib/settings"
+import { setSetting, getAllSettings, getSettings } from "@/lib/settings"
 import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
@@ -26,7 +26,9 @@ export async function GET(request: Request) {
       ? PUBLIC_UNAUTH_KEYS
       : requestedKeys
 
-    const settings = getAllSettings()
+    const settings = effectiveRequestedKeys
+      ? getSettings(effectiveRequestedKeys)
+      : getAllSettings()
     // Filter out provider API keys and avoid returning raw search secrets.
     const publicSettings: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(settings)) {

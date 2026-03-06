@@ -35,4 +35,17 @@ describe("searchDocuments", () => {
     expect(sql).not.toContain("LIMIT ?")
     expect(mockAll).toHaveBeenCalledWith("project-1", expect.any(Float32Array), 5)
   })
+
+  it("passes a preloaded embedding config through to embedSingle", async () => {
+    const { searchDocuments } = await import("../search")
+    const embeddingConfig = {
+      provider: "openai",
+      model: "text-embedding-3-small",
+      providerConfig: { apiKey: "sk-test" },
+    }
+
+    await searchDocuments("project-1", "hello world", 5, { embeddingConfig })
+
+    expect(mockEmbedSingle).toHaveBeenCalledWith("hello world", embeddingConfig)
+  })
 })

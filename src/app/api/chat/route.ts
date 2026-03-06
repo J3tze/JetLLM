@@ -3,7 +3,7 @@ import { z } from "zod"
 import { getModel } from "@/lib/providers"
 import { addMessage, deleteLatestAssistantMessage, getConversation } from "@/lib/conversations"
 import { getFormattedMemories } from "@/lib/memory"
-import { getSetting } from "@/lib/settings"
+import { getProviderSettings, getSettings, type ProviderConfig } from "@/lib/settings"
 import { extractMemories } from "@/lib/memory/extract"
 import { searchWeb, formatSearchResults, formatSearchToolSummary } from "@/lib/search/tavily"
 import { getProject } from "@/lib/projects"
@@ -64,6 +64,20 @@ const TEXT_FILE_EXTENSIONS = new Set([
 type PersistedMessagePart = {
   type: string
   [key: string]: unknown
+}
+
+type RagModelConfig = {
+  provider: string
+  model: string
+}
+
+type ChatRouteConfig = {
+  customSystemPrompt: string | null
+  userName: string | null
+  memoryEnabled: boolean | null
+  ragModel: RagModelConfig | null
+  tavilyKey: string | null
+  providerConfig: ProviderConfig | null
 }
 
 function isThinkingModel(modelId: string): boolean {
@@ -154,6 +168,76 @@ function buildAssistantParts(options: {
   return parts
 }
 
+function readStringSetting(value: unknown): string | null {
+  return typeof value === "string" ? value : null
+}
+
+function readBooleanSetting(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null
+}
+
+function readRagModelConfig(value: unknown): RagModelConfig | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+
+  const provider = typeof (value as { provider?: unknown }).provider === "string"
+    ? (value as { provider: string }).provider
+    : null
+  const model = typeof (value as { model?: unknown }).model === "string"
+    ? (value as { model: string }).model
+    : null
+
+  if (!provider || !model) {
+    return null
+  }
+
+  return { provider, model }
+}
+
+function readProviderConfig(value: unknown): ProviderConfig | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  return value as ProviderConfig
+}
+
+function loadChatRouteConfig(providerId: string): ChatRouteConfig {
+  const settings = getSettings([
+    "chat:systemPrompt",
+    "chat:userName",
+    "memory:enabled",
+    "rag:model",
+    "search:tavilyKey",
+    `provider:${providerId}`,
+  ])
+
+  return {
+    customSystemPrompt: readStringSetting(settings["chat:systemPrompt"]),
+    userName: readStringSetting(settings["chat:userName"]),
+    memoryEnabled: readBooleanSetting(settings["memory:enabled"]),
+    ragModel: readRagModelConfig(settings["rag:model"]),
+    tavilyKey: readStringSetting(settings["search:tavilyKey"]),
+    providerConfig: readProviderConfig(settings[`provider:${providerId}`]),
+  }
+}
+
+function loadRagProviderConfig(
+  ragModel: RagModelConfig | null,
+  chatProviderId: string,
+  chatProviderConfig: ProviderConfig | null
+): ProviderConfig | null {
+  if (!ragModel) {
+    return null
+  }
+
+  if (ragModel.provider === chatProviderId) {
+    return chatProviderConfig
+  }
+
+  return getProviderSettings([ragModel.provider])[ragModel.provider] ?? null
+}
+
 export async function POST(req: Request) {
   try {
     const user = getCurrentUserFromRequest(req)
@@ -219,22 +303,23 @@ export async function POST(req: Request) {
         ? m.parts
         : [{ type: "text" as const, text: getMessageText(m) }],
     }))
+    const chatConfig = loadChatRouteConfig(provider)
+    const ragProviderConfig = loadRagProviderConfig(chatConfig.ragModel, provider, chatConfig.providerConfig)
 
     // Build system prompt: custom setting > conversation-level > default
-    const customSystemPrompt = getSetting<string>("chat:systemPrompt")
-    let systemPrompt = customSystemPrompt || "You are a helpful AI assistant."
+    let systemPrompt = chatConfig.customSystemPrompt || "You are a helpful AI assistant."
     if (conversation?.systemPrompt) {
       systemPrompt = conversation.systemPrompt
     }
 
     // Inject user name if configured
-    const userName = getSetting<string>("chat:userName")
+    const userName = chatConfig.userName
     if (userName) {
       systemPrompt = systemPrompt + `\n\nThe user's name is ${userName}.`
     }
 
     // Inject memories into system prompt
-    const memoryEnabled = getSetting<boolean>("memory:enabled")
+    const memoryEnabled = chatConfig.memoryEnabled
     if (memoryEnabled !== false) {
       const memoryContext = getFormattedMemories()
       if (memoryContext) {
@@ -250,11 +335,17 @@ export async function POST(req: Request) {
         systemPrompt = systemPrompt + "\n\n" + project.systemPrompt
       }
       // RAG: search project documents for relevant context
-      const ragModel = getSetting<{ provider: string; model: string }>("rag:model")
+      const ragModel = chatConfig.ragModel
       if (ragModel?.provider && ragModel?.model) {
         try {
           if (lastUserText) {
-            const results = await searchDocuments(conversation.projectId, lastUserText)
+            const results = await searchDocuments(conversation.projectId, lastUserText, 5, {
+              embeddingConfig: {
+                provider: ragModel.provider,
+                model: ragModel.model,
+                providerConfig: ragProviderConfig,
+              },
+            })
             const ragContext = formatRagContext(results)
             if (ragContext) {
               systemPrompt = systemPrompt + "\n\n" + ragContext
@@ -267,7 +358,7 @@ export async function POST(req: Request) {
     }
 
     // Web search: check if API key is configured
-    const tavilyKey = getSetting<string>("search:tavilyKey")
+    const tavilyKey = chatConfig.tavilyKey
     if (tavilyKey) {
       systemPrompt = systemPrompt + "\n\nWhen web-search evidence is available, respond with a concise summary in bullet points followed by a References section that uses numbered citations like [1], [2]. Paraphrase findings and avoid copying snippets verbatim."
     }
@@ -275,7 +366,7 @@ export async function POST(req: Request) {
     // Always-search mode: pre-fetch results into system prompt
     if (webSearch && tavilyKey && lastUserText) {
       try {
-        const results = await searchWeb(lastUserText.slice(0, 200))
+        const results = await searchWeb(lastUserText.slice(0, 200), undefined, { apiKey: tavilyKey })
         const searchContext = formatSearchResults(results)
         if (searchContext) {
           systemPrompt = systemPrompt + "\n\n" + searchContext
@@ -287,7 +378,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const llmModel = getModel(provider, modelId)
+    const llmModel = getModel(provider, modelId, { config: chatConfig.providerConfig })
     // Only treat as thinking model when using direct Anthropic provider
     const thinking = provider === "anthropic" && isThinkingModel(modelId)
 
@@ -305,7 +396,7 @@ export async function POST(req: Request) {
             }),
             execute: async ({ query }: { query: string }) => {
               try {
-                const results = await searchWeb(query)
+                const results = await searchWeb(query, undefined, { apiKey: tavilyKey })
                 return formatSearchToolSummary(results)
               } catch (err) {
                 return `Search failed: ${err instanceof Error ? err.message : "Unknown error"}`

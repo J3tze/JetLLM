@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockGetProviderSettings = vi.fn()
 const mockGetSetting = vi.fn()
 const mockSetSetting = vi.fn()
 
 vi.mock("@/lib/settings", () => ({
+  getProviderSettings: (...args: unknown[]) => mockGetProviderSettings(...args),
   getSetting: (...args: unknown[]) => mockGetSetting(...args),
   setSetting: (...args: unknown[]) => mockSetSetting(...args),
 }))
@@ -21,7 +23,13 @@ function createPutRequest(body: unknown): Request {
   })
 }
 
-describe("PUT /api/providers/configs", () => {
+function createGetRequest(): Request {
+  return new Request("http://localhost:3000/api/providers/configs", {
+    method: "GET",
+  })
+}
+
+describe("/api/providers/configs", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetCurrentUserFromRequest.mockReturnValue({
@@ -118,6 +126,33 @@ describe("PUT /api/providers/configs", () => {
     expect(mockSetSetting).toHaveBeenCalledWith("provider:openai", {
       apiKey: "sk-existing",
       baseUrl: "https://api.new.example/v1",
+    })
+  })
+
+  it("returns provider summaries from batched provider settings", async () => {
+    const { GET } = await import("../route")
+
+    mockGetProviderSettings.mockReturnValue({
+      openai: {
+        apiKey: "sk-existing",
+        baseUrl: "https://api.openai.example/v1",
+      },
+      anthropic: {
+        apiKey: "",
+      },
+    })
+
+    const response = await GET(createGetRequest())
+    expect(response.status).toBe(200)
+
+    const json = await response.json()
+    expect(mockGetProviderSettings).toHaveBeenCalled()
+    expect(json.openai).toEqual({
+      hasKey: true,
+      baseUrl: "https://api.openai.example/v1",
+    })
+    expect(json.anthropic).toEqual({
+      hasKey: false,
     })
   })
 })
