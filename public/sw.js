@@ -1,4 +1,4 @@
-const CACHE_NAME = "jetllm-v1"
+const CACHE_NAME = "jetllm-v2"
 
 const PRECACHE_URLS = ["/", "/settings"]
 

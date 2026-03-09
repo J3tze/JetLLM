@@ -214,6 +214,17 @@ Path alias: `@` maps to `src/`.
 - Extended the chat theme transparency controls in `src/components/settings/chat-theme-picker.tsx` to cover chat background as well, so all major surface colors in the chat theme picker can be softened without making text colors harder to read.
 - Pushed commit `49fc895` (`feat: optimize config loading and polish chat themes`) to `master` and verified GitLab pipeline `#2373420018` completed successfully with both `publish_image` and `deploy_vps`, confirming the batching, chat bubble polish, and transparency-control changes were deployed cleanly.
 
+## Recent Updates (2026-03-09)
+
+- Locked the PWA manifest in `public/manifest.json` to `portrait-primary` and bumped the service worker cache name in `public/sw.js` to `jetllm-v2` so the installed mobile app stops auto-rotating into landscape and refreshes cached manifest assets more reliably after deploys.
+- Documented the local host inventory in `AGENTS.md` so future agents know AGNai is expected to sit on `127.0.0.1:3001` behind a later Nginx Proxy Manager/Cloudflare route and the local SillyTavern stack is currently stopped; this handoff could not re-verify the containers because the local Docker daemon was unavailable and `http://127.0.0.1:3001` was not reachable.
+
+## Local Service Inventory
+
+- JetLLM local compose in this repo binds host port `3000` to container port `3000` via `docker-compose.yml`.
+- Local AGNai is intended to run outside this repo on `127.0.0.1:3001` with a MongoDB companion container; keep it loopback-only until it is fronted by Nginx Proxy Manager and Cloudflare.
+- Local SillyTavern stack is currently stopped; check for port or proxy overlap before bringing it back up alongside AGNai or JetLLM.
+
 ## Planning Docs
 
 - `docs/plans/2026-02-24-jetllm-design.md`
