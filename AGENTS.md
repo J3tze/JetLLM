@@ -212,6 +212,7 @@ Path alias: `@` maps to `src/`.
 - Increased the chat bubble radii again in `src/components/chat/chat-message.tsx` after visual review feedback so the flat, minimal, and full variants read clearly rounded instead of only subtly softened.
 - Added transparency sliders to the chat theme color controls in `src/components/settings/chat-theme-picker.tsx` for user bubble, assistant bubble, and assistant border colors, storing alpha directly in the saved color values so theme customization can produce semi-transparent surfaces without changing the settings schema.
 - Extended the chat theme transparency controls in `src/components/settings/chat-theme-picker.tsx` to cover chat background as well, so all major surface colors in the chat theme picker can be softened without making text colors harder to read.
+- Pushed commit `49fc895` (`feat: optimize config loading and polish chat themes`) to `master` and verified GitLab pipeline `#2373420018` completed successfully with both `publish_image` and `deploy_vps`, confirming the batching, chat bubble polish, and transparency-control changes were deployed cleanly.
 
 ## Planning Docs
 
