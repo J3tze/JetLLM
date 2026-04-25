@@ -218,6 +218,7 @@ Path alias: `@` maps to `src/`.
 
 - Locked the PWA manifest in `public/manifest.json` to `portrait-primary` and bumped the service worker cache name in `public/sw.js` to `jetllm-v2` so the installed mobile app stops auto-rotating into landscape and refreshes cached manifest assets more reliably after deploys.
 - Documented the local host inventory in `AGENTS.md` so future agents know AGNai is expected to sit on `127.0.0.1:3001` behind a later Nginx Proxy Manager/Cloudflare route and the local SillyTavern stack is currently stopped; this handoff could not re-verify the containers because the local Docker daemon was unavailable and `http://127.0.0.1:3001` was not reachable.
+- Updated the live VPS AGNai compose at `/root/agnai/docker-compose.yml` to attach the app service to Docker network `st-net` with alias `agnai`, then redeployed and confirmed `nginx-proxy` can resolve `agnai`; Nginx Proxy Manager can now forward to hostname `agnai` on port `3001` instead of relying on host-loopback routing.
 
 ## Local Service Inventory
 
