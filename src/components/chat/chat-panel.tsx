@@ -11,6 +11,12 @@ import { ModelSelector } from "./model-selector"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PROVIDER_REGISTRY } from "@/lib/providers/registry"
 import type { BubbleStyle } from "@/hooks/use-chat-theme"
+import {
+  isTextDocument,
+  resolveAttachmentMediaType,
+  validateChatAttachments,
+} from "@/lib/chat-attachments"
+import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_LABELS, type ThinkingLevel } from "@/lib/thinking"
 
 type ProjectInitMessage = {
   projectId: string
@@ -36,79 +42,6 @@ type ConversationLoadAction = "clear" | "skip" | "load"
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 4096
 const DEFAULT_TOP_P = 1
-const TEXT_MEDIA_TYPES = new Set([
-  "application/json",
-  "application/xml",
-  "application/javascript",
-  "application/x-javascript",
-  "application/sql",
-  "application/x-sh",
-  "application/x-httpd-php",
-  "application/x-yaml",
-  "application/yaml",
-])
-
-const TEXT_FILE_EXTENSIONS = new Set([
-  "txt",
-  "md",
-  "markdown",
-  "csv",
-  "tsv",
-  "json",
-  "xml",
-  "yaml",
-  "yml",
-  "log",
-  "html",
-  "htm",
-  "css",
-  "js",
-  "ts",
-  "tsx",
-  "jsx",
-  "py",
-  "java",
-  "c",
-  "cpp",
-  "h",
-  "hpp",
-  "rs",
-  "go",
-  "sql",
-  "sh",
-  "ps1",
-])
-
-const EXTENSION_MEDIA_TYPES: Record<string, string> = {
-  txt: "text/plain",
-  md: "text/markdown",
-  markdown: "text/markdown",
-  csv: "text/csv",
-  tsv: "text/tab-separated-values",
-  json: "application/json",
-  xml: "application/xml",
-  yaml: "application/x-yaml",
-  yml: "application/x-yaml",
-  log: "text/plain",
-  html: "text/html",
-  htm: "text/html",
-  css: "text/css",
-  js: "application/javascript",
-  ts: "text/plain",
-  tsx: "text/plain",
-  jsx: "text/plain",
-  py: "text/plain",
-  java: "text/plain",
-  c: "text/plain",
-  cpp: "text/plain",
-  h: "text/plain",
-  hpp: "text/plain",
-  rs: "text/plain",
-  go: "text/plain",
-  sql: "application/sql",
-  sh: "application/x-sh",
-  ps1: "text/plain",
-}
 
 export function getConversationLoadAction(
   previousConversationId: string | null | undefined,
@@ -186,30 +119,6 @@ function parseStoredParts(content: string, metadata: string | null | undefined):
   return [{ type: "text" as const, text: content }]
 }
 
-function getFileExtension(filename: string): string {
-  const dotIndex = filename.lastIndexOf(".")
-  return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : ""
-}
-
-function inferMediaType(file: File): string {
-  if (file.type) return file.type
-  const extension = getFileExtension(file.name)
-  return EXTENSION_MEDIA_TYPES[extension] ?? "application/octet-stream"
-}
-
-function isTextDocument(mediaType: string, filename?: string): boolean {
-  if (mediaType.startsWith("text/")) {
-    return true
-  }
-  if (TEXT_MEDIA_TYPES.has(mediaType)) {
-    return true
-  }
-  if (!filename) {
-    return false
-  }
-  return TEXT_FILE_EXTENSIONS.has(getFileExtension(filename))
-}
-
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -226,9 +135,16 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
+function resolveChatError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  return fallback
+}
+
 async function buildFileParts(files: File[]): Promise<FileUIPart[]> {
   const parts = await Promise.all(files.map(async (file): Promise<FileUIPart> => {
-    const mediaType = inferMediaType(file)
+    const mediaType = resolveAttachmentMediaType(file)
     const url = await readFileAsDataUrl(file)
     return {
       type: "file",
@@ -240,6 +156,29 @@ async function buildFileParts(files: File[]): Promise<FileUIPart[]> {
   return parts
 }
 
+function messageHasAttachments(message: UIMessage | undefined): boolean {
+  return Boolean(message?.parts?.some(part => part.type === "file"))
+}
+
+function getAssistantActivityLabel(status: string, messages: UIMessage[], webSearch: boolean): string {
+  const latestMessage = messages[messages.length - 1]
+  const latestUserHasAttachments = latestMessage?.role === "user" && messageHasAttachments(latestMessage)
+
+  if (status === "submitted" && latestUserHasAttachments) {
+    return "Reading attachments..."
+  }
+  if (status === "submitted" && webSearch) {
+    return "Preparing web search..."
+  }
+  if (status === "submitted") {
+    return "Contacting provider..."
+  }
+  if (status === "streaming") {
+    return "Writing response..."
+  }
+  return "Generating response..."
+}
+
 export function ChatPanel({ conversationId, onConversationCreated, projectId, projectInitMessage, onProjectInitConsumed }: ChatPanelProps) {
   const [provider, setProvider] = useState("")
   const [model, setModel] = useState("")
@@ -247,7 +186,9 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   const [defaultsLoaded, setDefaultsLoaded] = useState(false)
   const [bubbleStyle, setBubbleStyle] = useState<BubbleStyle>("flat")
   const [webSearch, setWebSearch] = useState(false)
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
   const [searchAvailable, setSearchAvailable] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
 
   const convIdRef = useRef(conversationId)
   convIdRef.current = conversationId
@@ -260,6 +201,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
     maxTokens: DEFAULT_MAX_TOKENS,
     topP: DEFAULT_TOP_P,
     webSearch,
+    thinkingLevel,
   })
   useEffect(() => {
     stateRef.current = {
@@ -269,8 +211,9 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       maxTokens: DEFAULT_MAX_TOKENS,
       topP: DEFAULT_TOP_P,
       webSearch,
+      thinkingLevel,
     }
-  }, [provider, model, webSearch])
+  }, [provider, model, webSearch, thinkingLevel])
 
   // Load default provider/model from settings
   useEffect(() => {
@@ -343,6 +286,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
     transport,
     onError: (error) => {
       console.error("[useChat] Error:", error)
+      setChatError(resolveChatError(error, "The assistant failed to respond. Your message was saved; retry when the provider is available."))
     },
   })
 
@@ -390,6 +334,7 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
           return
         }
         console.error("[chat-panel] Failed to load conversation messages:", error)
+        setChatError("Could not load this conversation. Try switching away and back again.")
         if (action === "load") {
           // We intentionally avoid clearing on same-conversation rehydrate failures
           // to prevent transient fetch errors from wiping visible history.
@@ -401,6 +346,8 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
   }, [conversationId, messages.length, setMessages])
 
   const isLoading = status === "streaming" || status === "submitted"
+  const assistantActivityLabel = getAssistantActivityLabel(status, messages, webSearch)
+  const activeProviderName = PROVIDER_REGISTRY.find(p => p.id === provider)?.name ?? provider
 
   // Keep a ref for projectId so handleSend always reads the latest
   const projectIdRef = useRef(projectId)
@@ -408,10 +355,17 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
 
   const handleSend = useCallback(async ({ text, files }: ChatInputSendPayload) => {
     try {
+      setChatError(null)
       const trimmedText = text.trim()
       if (!trimmedText && files.length === 0) {
         return
       }
+
+      const validation = validateChatAttachments(files)
+      if (!validation.valid) {
+        throw new Error(validation.error ?? "One or more attachments are not supported.")
+      }
+
       let activeConvId = convIdRef.current
 
       // Auto-create conversation on first message
@@ -476,6 +430,9 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
       }
     } catch (error) {
       console.error("[handleSend] Error:", error)
+      const message = resolveChatError(error, "Failed to send. Your draft was kept.")
+      setChatError(message)
+      throw new Error(message)
     }
   }, [sendMessage, onConversationCreated])
 
@@ -483,8 +440,10 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
     if (isLoading) {
       return
     }
+    setChatError(null)
     regenerate().catch((error) => {
       console.error("[handleRetry] Error:", error)
+      setChatError(resolveChatError(error, "Failed to retry the latest response."))
     })
   }, [regenerate, isLoading])
 
@@ -521,29 +480,79 @@ export function ChatPanel({ conversationId, onConversationCreated, projectId, pr
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden safe-area-top">
-      <div className="sticky top-0 z-20 shrink-0 px-2 pt-2 pb-3 sm:px-4 flex items-center gap-2 bg-gradient-to-b from-background via-background/95 to-transparent backdrop-blur-sm">
-        <SidebarTrigger className="h-8 w-8 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <ModelSelector
-            provider={provider}
-            model={model}
-            onProviderChange={handleProviderChange}
-            onModelChange={setModel}
-          />
+      <div className="sticky top-0 z-20 shrink-0 bg-gradient-to-b from-background via-background/95 to-transparent px-2 pb-3 pt-2 backdrop-blur-sm sm:px-4">
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2">
+          <SidebarTrigger className="h-9 w-9 shrink-0 rounded-full border border-border/40 bg-background/65 shadow-sm backdrop-blur" />
+          <div className="min-w-0 flex-1 rounded-[1.35rem] border border-border/45 bg-background/75 px-2 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <ModelSelector
+                  provider={provider}
+                  model={model}
+                  onProviderChange={handleProviderChange}
+                  onModelChange={setModel}
+                />
+              </div>
+              <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/45 bg-black/[0.12] px-2.5 py-1 text-[11px] text-muted-foreground">
+                  <span className={isLoading ? "h-1.5 w-1.5 animate-pulse rounded-full bg-primary" : "h-1.5 w-1.5 rounded-full bg-primary/70"} />
+                  {isLoading ? "Working" : "Ready"}
+                </span>
+                {activeProviderName ? (
+                  <span className="inline-flex max-w-32 items-center rounded-full border border-border/45 bg-black/[0.12] px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <span className="truncate">{activeProviderName}</span>
+                  </span>
+                ) : null}
+                {webSearch ? (
+                  <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] text-primary">
+                    Search on
+                  </span>
+                ) : null}
+                {thinkingLevel !== "off" ? (
+                  <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] text-primary">
+                    Think {THINKING_LEVEL_LABELS[thinkingLevel]}
+                  </span>
+                ) : null}
+                {projectId ? (
+                  <span className="inline-flex items-center rounded-full border border-border/45 bg-black/[0.12] px-2.5 py-1 text-[11px] text-muted-foreground">
+                    Project
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <MessageList
         messages={messages}
         isLoading={isLoading}
+        activityLabel={assistantActivityLabel}
         bubbleStyle={bubbleStyle}
         onRetry={handleRetry}
       />
+      {chatError ? (
+        <div className="mx-auto mb-2 w-full max-w-4xl px-2 sm:px-4">
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive/95 shadow-sm backdrop-blur">
+            <span className="leading-5">{chatError}</span>
+            <button
+              type="button"
+              className="shrink-0 text-destructive/70 transition-colors hover:text-destructive"
+              onClick={() => setChatError(null)}
+              aria-label="Dismiss chat error"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
       <ChatInput
         onSend={handleSend}
         isLoading={isLoading}
         webSearch={webSearch}
         onWebSearchChange={setWebSearch}
         searchAvailable={searchAvailable}
+        thinkingLevel={thinkingLevel}
+        onThinkingLevelChange={setThinkingLevel}
       />
     </div>
   )

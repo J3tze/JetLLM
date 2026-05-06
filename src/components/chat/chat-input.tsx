@@ -9,15 +9,28 @@ import {
 } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Plus, SendHorizontal, Globe, Paperclip, X, Mic, Square } from "lucide-react"
+import { Plus, SendHorizontal, Globe, Paperclip, X, Mic, Square, FileText, ImageIcon, Brain } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  ACCEPTED_CHAT_ATTACHMENTS,
+  MAX_CHAT_ATTACHMENTS,
+  formatBytes,
+  isImageAttachment,
+  isTextDocument,
+  resolveAttachmentMediaType,
+  validateChatAttachments,
+} from "@/lib/chat-attachments"
+import {
+  THINKING_LEVEL_LABELS,
+  THINKING_LEVELS,
+  type ThinkingLevel,
+} from "@/lib/thinking"
 
 export type ChatInputSendPayload = {
   text: string
   files: File[]
 }
 
-const ACCEPTED_CHAT_ATTACHMENTS = "image/*,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.log,.html,.htm,.css,.js,.ts,.tsx,.jsx,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.sql,.sh,.ps1"
 const PREFERRED_RECORDER_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -87,6 +100,26 @@ function resolveTranscriptionError(error: unknown): string {
   return "Transcription failed. Please try again."
 }
 
+function resolveSendError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  return "Failed to send. Your draft was kept."
+}
+
+function getAttachmentKind(file: File): "image" | "text" | "file" {
+  const mediaType = resolveAttachmentMediaType(file)
+  if (isImageAttachment(mediaType)) return "image"
+  if (isTextDocument(mediaType, file.name)) return "text"
+  return "file"
+}
+
+function getAttachmentKindLabel(kind: "image" | "text" | "file"): string {
+  if (kind === "image") return "Image"
+  if (kind === "text") return "Text"
+  return "File"
+}
+
 function chooseRecorderMimeType(recorderConstructor: typeof MediaRecorder): string | undefined {
   if (typeof recorderConstructor.isTypeSupported !== "function") {
     return undefined
@@ -95,22 +128,36 @@ function chooseRecorderMimeType(recorderConstructor: typeof MediaRecorder): stri
 }
 
 type ChatInputProps = {
-  onSend: (payload: ChatInputSendPayload) => void
+  onSend: (payload: ChatInputSendPayload) => void | Promise<void>
   isLoading?: boolean
   webSearch: boolean
   onWebSearchChange: (enabled: boolean) => void
   searchAvailable: boolean
+  thinkingLevel: ThinkingLevel
+  onThinkingLevelChange: (level: ThinkingLevel) => void
 }
 
-export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, searchAvailable }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isLoading,
+  webSearch,
+  onWebSearchChange,
+  searchAvailable,
+  thinkingLevel,
+  onThinkingLevelChange,
+}: ChatInputProps) {
   const [value, setValue] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [toolsOpen, setToolsOpen] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const [speechError, setSpeechError] = useState<string | null>(null)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isSendingRef = useRef(false)
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -122,6 +169,40 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   const acceptTranscriptionResultsRef = useRef(false)
 
   const hasInput = value.trim().length > 0 || files.length > 0
+  const isBusy = isLoading || isTranscribing || isSending
+  const sendTitle = !hasInput
+    ? "Enter a message or attach a file"
+    : isSending
+      ? "Preparing message..."
+      : isLoading
+        ? "Waiting for response"
+        : isTranscribing
+          ? "Transcribing audio"
+          : "Send message"
+  const statusMessage = speechError ?? attachmentError ?? sendError
+  const statusTone = statusMessage
+    ? "error"
+    : isRecording || (webSearch && !isTranscribing && !isSending)
+      ? "primary"
+      : "muted"
+  const statusText = statusMessage
+    ?? (isRecording
+      ? "Listening..."
+      : isTranscribing
+        ? "Transcribing audio..."
+        : isSending
+          ? files.length > 0
+            ? "Preparing attachments and saving your message..."
+            : "Saving your message..."
+          : webSearch
+            ? "Web search enabled"
+            : "")
+  const statusIcon = !statusMessage && isRecording
+    ? "mic"
+    : !statusMessage && webSearch && !isTranscribing && !isSending
+      ? "globe"
+      : null
+  const thinkingEnabled = thinkingLevel !== "off"
   const iconButtonClass = "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 
   const buildSpeechText = useCallback((baseText: string, spokenText: string) => {
@@ -340,11 +421,13 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
     }
   }, [stopMediaStream])
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const trimmed = value.trim()
-    if ((!trimmed && files.length === 0) || isLoading || isTranscribing) return
+    if ((!trimmed && files.length === 0) || isBusy || isSendingRef.current) return
 
     setSpeechError(null)
+    setAttachmentError(null)
+    setSendError(null)
     acceptSpeechResultsRef.current = false
     acceptTranscriptionResultsRef.current = false
     recognitionRef.current?.stop()
@@ -356,19 +439,29 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
 
     recordingModeRef.current = null
     setIsRecording(false)
-    onSend({ text: trimmed, files })
-    setValue("")
-    setFiles([])
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+
+    isSendingRef.current = true
+    setIsSending(true)
+    try {
+      await onSend({ text: trimmed, files })
+      setValue("")
+      setFiles([])
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto"
+      }
+    } catch (error) {
+      setSendError(resolveSendError(error))
+    } finally {
+      isSendingRef.current = false
+      setIsSending(false)
     }
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-    }
-  }, [value, files, isLoading, isTranscribing, onSend])
+  }, [value, files, isBusy, onSend])
 
   const handleMicClick = () => {
-    if (isLoading || isTranscribing) {
+    if (isBusy) {
       return
     }
 
@@ -420,29 +513,46 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
     if (!incoming || incoming.length === 0) return
 
     const selectedFiles = Array.from(incoming)
-    setFiles((current) => {
-      const seen = new Set(current.map(file => `${file.name}-${file.size}-${file.lastModified}`))
-      const next = [...current]
+    const seen = new Set(files.map(file => `${file.name}-${file.size}-${file.lastModified}`))
+    const next = [...files]
 
-      for (const file of selectedFiles) {
-        const key = `${file.name}-${file.size}-${file.lastModified}`
-        if (!seen.has(key)) {
-          seen.add(key)
-          next.push(file)
-        }
+    for (const file of selectedFiles) {
+      const key = `${file.name}-${file.size}-${file.lastModified}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        next.push(file)
       }
+    }
 
-      return next
-    })
+    const validation = validateChatAttachments(next)
+    if (!validation.valid) {
+      setAttachmentError(validation.error ?? "One or more attachments are not supported.")
+      event.target.value = ""
+      return
+    }
+
+    setAttachmentError(null)
+    setSendError(null)
+    setFiles(next)
 
     event.target.value = ""
   }
 
   const handleRemoveFile = (index: number) => {
     setFiles((current) => current.filter((_, i) => i !== index))
+    setAttachmentError(null)
+  }
+
+  const handleClearFiles = () => {
+    setFiles([])
+    setAttachmentError(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const handleUploadClick = () => {
+    if (isBusy) return
     fileInputRef.current?.click()
     setToolsOpen(false)
   }
@@ -450,7 +560,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
@@ -470,28 +580,71 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
           multiple
           accept={ACCEPTED_CHAT_ATTACHMENTS}
           onChange={handleFilesSelected}
+          disabled={isBusy}
         />
 
         {files.length > 0 ? (
-          <div className="mb-2 rounded-xl border border-border/50 bg-background/65 p-2">
-            <div className="flex flex-wrap gap-1.5">
-              {files.map((file, index) => (
-                <span
-                  key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/80 px-2 py-1 text-xs text-foreground/90"
-                >
-                  <Paperclip className="h-3 w-3 text-muted-foreground" />
-                  <span className="max-w-[180px] truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => handleRemoveFile(index)}
-                    aria-label={`Remove ${file.name}`}
+          <div className="mb-2 overflow-hidden rounded-[1.1rem] border border-border/50 bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
+            <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/90">
+                  <Paperclip className="h-3.5 w-3.5 text-primary" />
+                  Attachments
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    {files.length}/{MAX_CHAT_ATTACHMENTS}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  Text/code files are included as safe context; images stay available for vision models.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-full px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleClearFiles}
+                disabled={isBusy}
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="flex max-h-36 gap-2 overflow-x-auto p-2 scrollbar-none sm:grid sm:grid-cols-2 sm:overflow-y-auto sm:overflow-x-hidden">
+              {files.map((file, index) => {
+                const kind = getAttachmentKind(file)
+                return (
+                  <div
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    className="group flex min-w-[230px] items-center gap-2 rounded-xl border border-border/45 bg-black/[0.12] px-2.5 py-2 text-xs text-foreground/90 transition-colors hover:border-primary/30 sm:min-w-0"
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      {kind === "image" ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{file.name}</span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span>{getAttachmentKindLabel(kind)}</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span>{formatBytes(file.size)}</span>
+                        {isBusy ? (
+                          <>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                            <span>Locked</span>
+                          </>
+                        ) : null}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      onClick={() => handleRemoveFile(index)}
+                      disabled={isBusy}
+                      aria-label={`Remove ${file.name}`}
+                      title={`Remove ${file.name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         ) : null}
@@ -505,6 +658,7 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                   iconButtonClass,
                   toolsOpen && "bg-foreground/5 text-foreground"
                 )}
+                disabled={isBusy}
                 aria-label="Open tools"
               >
                 <Plus className="h-4 w-4" />
@@ -515,17 +669,18 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                 <p className="text-xs font-medium text-muted-foreground">Tools</p>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleUploadClick}
+                  disabled={isBusy}
                 >
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
                   Upload Files
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground sm:hidden"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
                   onClick={handleMicClick}
-                  disabled={isLoading || isTranscribing}
+                  disabled={isBusy}
                   aria-label={isRecording ? "Stop voice input" : "Start voice input"}
                 >
                   {isRecording ? <Square className="h-4 w-4 text-primary" /> : <Mic className="h-4 w-4 text-muted-foreground" />}
@@ -548,85 +703,115 @@ export function ChatInput({ onSend, isLoading, webSearch, onWebSearchChange, sea
                     Configure a Tavily API key in Settings &gt; Providers to enable web search.
                   </p>
                 )}
+                <div className="space-y-2 rounded-md px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-sm">Thinking</Label>
+                    </div>
+                    <span className={cn("text-xs", thinkingEnabled ? "text-primary" : "text-muted-foreground")}>{THINKING_LEVEL_LABELS[thinkingLevel]}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {THINKING_LEVELS.map(level => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={cn(
+                          "rounded-full border px-2 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          thinkingLevel === level
+                            ? "border-primary/40 bg-primary/15 text-primary"
+                            : "border-border/50 bg-background/40 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        )}
+                        onClick={() => onThinkingLevelChange(level)}
+                        disabled={isBusy}
+                        aria-pressed={thinkingLevel === level}
+                      >
+                        {THINKING_LEVEL_LABELS[level]}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] leading-4 text-muted-foreground/70">
+                    Applied only when the selected direct provider/model supports reasoning.
+                  </p>
+                </div>
               </div>
             </PopoverContent>
           </Popover>
 
-            <button
-              type="button"
-              onClick={handleUploadClick}
-              disabled={isLoading}
-              className={cn(iconButtonClass, "hidden sm:flex")}
-              aria-label="Attach files"
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            disabled={isBusy}
+            className={cn(iconButtonClass, "hidden sm:flex")}
+            aria-label="Attach files"
+            title="Attach files"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
 
-            <Textarea
-              ref={textareaRef}
+          <Textarea
+            ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-              onInput={handleInput}
-              placeholder="Type a message..."
-              rows={1}
-              className="min-h-[48px] max-h-[180px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
+            onInput={handleInput}
+            placeholder="Type a message..."
+            disabled={isSending}
+            rows={1}
+            className="min-h-[48px] max-h-[180px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
 
-            <button
-              type="button"
-              onClick={handleMicClick}
-              disabled={isLoading || isTranscribing}
-              className={cn(
-                iconButtonClass,
-                "hidden sm:flex",
-                isRecording
-                  ? "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
-                  : isLoading || isTranscribing
-                    ? "text-muted-foreground/40 hover:bg-transparent hover:text-muted-foreground/40"
-                    : undefined
-              )}
-              aria-label={isRecording ? "Stop voice input" : "Start voice input"}
-              title={isTranscribing ? "Transcribing..." : (isRecording ? "Stop recording" : "Start recording")}
-            >
-              {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
-            </button>
+          <button
+            type="button"
+            onClick={handleMicClick}
+            disabled={isBusy}
+            className={cn(
+              iconButtonClass,
+              "hidden sm:flex",
+              isRecording
+                ? "bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary"
+                : isBusy
+                  ? "text-muted-foreground/40 hover:bg-transparent hover:text-muted-foreground/40"
+                  : undefined
+            )}
+            aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+            title={isTranscribing ? "Transcribing..." : (isRecording ? "Stop recording" : "Start recording")}
+          >
+            {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
+          </button>
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!hasInput || isLoading || isTranscribing}
-              className={cn(iconButtonClass, "text-muted-foreground/80 disabled:text-muted-foreground/80 disabled:opacity-100")}
-            >
-              <SendHorizontal className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleSend()}
+            disabled={!hasInput || isBusy}
+            className={cn(iconButtonClass, "text-muted-foreground/80 disabled:text-muted-foreground/80 disabled:opacity-100")}
+            aria-label={sendTitle}
+            title={sendTitle}
+          >
+            <SendHorizontal className="h-4 w-4" />
+          </button>
+        </div>
 
-        {isRecording && (
-          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
-            <Mic className="h-3 w-3 text-primary" />
-            <span className="text-[11px] text-primary">Listening...</span>
-          </div>
-        )}
-
-        {isTranscribing && (
-          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground">Transcribing...</span>
-          </div>
-        )}
-
-        {speechError && (
-          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
-            <span className="text-[11px] text-destructive/90">{speechError}</span>
-          </div>
-        )}
-
-        {webSearch && (
-          <div className="ml-1 mt-1.5 flex items-center gap-1.5">
-            <Globe className="h-3 w-3 text-primary" />
-            <span className="text-[11px] text-primary">Web search enabled</span>
-          </div>
-        )}
+        <div className="ml-1 mt-1.5 min-h-4">
+          {statusText ? (
+            <div className="flex items-center gap-1.5">
+              {statusIcon === "mic" ? <Mic className="h-3 w-3 text-primary" /> : null}
+              {statusIcon === "globe" ? <Globe className="h-3 w-3 text-primary" /> : null}
+              <span
+                className={cn(
+                  "text-[11px]",
+                  statusTone === "error"
+                    ? "text-destructive/90"
+                    : statusTone === "primary"
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                )}
+              >
+                {statusText}
+              </span>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
+import { memo, useState, useEffect, useRef, useCallback, useMemo, useId } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ChatMessage } from "./chat-message"
@@ -49,6 +49,12 @@ const GREETINGS = [
   "Fire away.",
   "Another day, another prompt.",
   "I'm all ears. Well, all tokens.",
+]
+
+const EMPTY_STATE_HINTS = [
+  "Drop in a text file and ask for a summary.",
+  "Turn on web search for current sources.",
+  "Ask for code, plans, debugging, or writing help.",
 ]
 
 function getViewport(ref: React.RefObject<HTMLDivElement | null>) {
@@ -165,11 +171,30 @@ function renderFilePart(part: { mediaType: string; url: string; filename?: strin
       key={key}
       href={part.url}
       download={part.filename || "attachment"}
+      title={label}
       className="mb-1 inline-flex max-w-full items-center gap-2 rounded-md border border-border/50 bg-black/20 px-2.5 py-1.5 text-xs text-foreground/90 hover:border-primary/40 hover:text-foreground"
     >
-        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
       <span className="max-w-[240px] truncate">{label}</span>
     </a>
+  )
+}
+
+function AssistantActivity({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-foreground/85">{label}</span>
+        <span className="mt-1 flex gap-1" aria-hidden="true">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.2s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.1s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" />
+        </span>
+      </span>
+    </div>
   )
 }
 
@@ -216,13 +241,13 @@ const markdownComponents: Components = {
   },
 }
 
-function MarkdownText({ text }: { text: string }) {
+const MarkdownText = memo(function MarkdownText({ text }: { text: string }) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
       {text}
     </ReactMarkdown>
   )
-}
+})
 
 function WebSearchResultContent({ outputText, parsedOutput }: WebSearchResultContentProps) {
   const [expanded, setExpanded] = useState(false)
@@ -389,11 +414,12 @@ function renderWebSearchIndicator(part: unknown, key: number) {
 type MessageListProps = {
   messages: UIMessage[]
   isLoading?: boolean
+  activityLabel?: string
   bubbleStyle?: BubbleStyle
   onRetry?: () => void
 }
 
-export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry }: MessageListProps) {
+export function MessageList({ messages, isLoading, activityLabel = "Generating response...", bubbleStyle = "flat", onRetry }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const isUserScrolledUp = useRef(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -458,10 +484,28 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <JetLLMLogo className="mx-auto w-48 h-auto" />
-          <p className="text-sm text-muted-foreground">{greeting}</p>
+      <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+        <div className="mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center text-center">
+          <div className="relative">
+            <div className="absolute inset-x-6 top-8 h-24 rounded-full bg-primary/10 blur-3xl" />
+            <JetLLMLogo className="relative mx-auto w-44 h-auto sm:w-52" />
+          </div>
+          <div className="mt-5 space-y-2">
+            <p className="text-lg font-medium tracking-tight text-foreground sm:text-xl">{greeting}</p>
+            <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
+              Chat, inspect files, search the web, or work through a project without leaving the thread.
+            </p>
+          </div>
+          <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
+            {EMPTY_STATE_HINTS.map((hint) => (
+              <div
+                key={hint}
+                className="rounded-2xl border border-border/45 bg-background/65 px-3 py-3 text-left text-xs leading-5 text-muted-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/45"
+              >
+                {hint}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -497,6 +541,8 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
                     size="sm"
                     className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                     onClick={onRetry}
+                    aria-label="Retry latest assistant response"
+                    title="Retry latest assistant response"
                   >
                     <RotateCw className="h-3 w-3" />
                     Retry
@@ -533,7 +579,7 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
           ))}
           {showThinking && (
             <ChatMessage role="assistant" bubbleStyle={bubbleStyle}>
-              <span className="animate-pulse">Thinking...</span>
+              <AssistantActivity label={activityLabel} />
             </ChatMessage>
           )}
         </div>
@@ -544,6 +590,8 @@ export function MessageList({ messages, isLoading, bubbleStyle = "flat", onRetry
           variant="secondary"
           className="absolute bottom-4 right-4 z-10 h-8 w-8 rounded-full border-border/50 shadow-lg"
           onClick={scrollToBottom}
+          aria-label="Scroll to latest message"
+          title="Scroll to latest message"
         >
           <ChevronDown className="h-4 w-4" />
         </Button>

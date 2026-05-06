@@ -220,6 +220,15 @@ Path alias: `@` maps to `src/`.
 - Documented the local host inventory in `AGENTS.md` so future agents know AGNai is expected to sit on `127.0.0.1:3001` behind a later Nginx Proxy Manager/Cloudflare route and the local SillyTavern stack is currently stopped; this handoff could not re-verify the containers because the local Docker daemon was unavailable and `http://127.0.0.1:3001` was not reachable.
 - Updated the live VPS AGNai compose at `/root/agnai/docker-compose.yml` to attach the app service to Docker network `st-net` with alias `agnai`, then redeployed and confirmed `nginx-proxy` can resolve `agnai`; Nginx Proxy Manager can now forward to hostname `agnai` on port `3001` instead of relying on host-loopback routing.
 
+## Recent Updates (2026-05-06)
+
+- Verified the local checkout against GitHub by fetching `github` and comparing `master...github/master`; local `master`, `origin/master`, and `github/master` all point to `f2aae12`, so no fast-forward or merge was needed and the repo is current with GitHub.
+- Hardened chat attachment handling across `src/lib/chat-attachments.ts`, `src/components/chat/chat-input.tsx`, `src/components/chat/chat-panel.tsx`, and `src/app/api/chat/route.ts`: text/code files now have size guardrails, draft-preserving send behavior, visible errors, and server-side conversion into bounded plain text before model calls so OpenAI-compatible providers do not hang on raw text-file parts.
+- Polished the chat UI across `src/components/chat/chat-input.tsx`, `src/components/chat/chat-panel.tsx`, `src/components/chat/message-list.tsx`, and `src/components/chat/model-selector.tsx`: attachments now render in a richer tray, the composer uses a single status line, the header has compact state/provider pills, and assistant/empty states are more contextual so the chat experience feels smoother.
+- Added a chat thinking-level toggle across `src/lib/thinking.ts`, `src/components/chat/chat-input.tsx`, `src/components/chat/chat-panel.tsx`, and `src/app/api/chat/route.ts`; Off/Low/Medium/High now maps to direct Anthropic thinking budgets and direct OpenAI reasoning effort where supported, while proxy/non-reasoning providers safely ignore it.
+- Verified the agreed default wallpaper remains tracked as `public/default-wallpaper.jpg` and already matches `github/master` (`da884e9`), so no wallpaper asset restore was needed before the push.
+- Reworked JetLLM SVG branding in `src/components/jetllm-logo.tsx`, `public/icons/icon-192.svg`, and `public/icons/icon-512.svg` from the old paper-plane mark into a green swept-wing jet aircraft silhouette so the app/logo/PWA icon better match the JetLLM name.
+
 ## Local Service Inventory
 
 - JetLLM local compose in this repo binds host port `3000` to container port `3000` via `docker-compose.yml`.

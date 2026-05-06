@@ -100,7 +100,7 @@ export function ModelSelector({
   return (
     <div className="flex w-full min-w-0 flex-1 items-center gap-1.5 sm:w-auto sm:flex-initial sm:gap-2">
       <Select value={provider} onValueChange={onProviderChange}>
-        <SelectTrigger className="h-9 w-[clamp(6.75rem,38vw,10rem)] min-w-0 shrink-0 text-xs !border-border !bg-transparent sm:w-auto sm:min-w-[140px]">
+        <SelectTrigger className="h-9 w-[clamp(6.75rem,38vw,10rem)] min-w-0 shrink-0 rounded-full text-xs !border-border/55 !bg-black/[0.12] shadow-sm sm:w-auto sm:min-w-[140px]">
           <SelectValue placeholder="Provider" />
         </SelectTrigger>
         <SelectContent>
@@ -113,7 +113,8 @@ export function ModelSelector({
       </Select>
 
       {loading ? (
-        <div className="h-9 min-w-0 flex-1 rounded-md border border-border bg-transparent px-3 text-xs text-muted-foreground sm:min-w-[200px] sm:flex-initial flex items-center">
+        <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-border/55 bg-black/[0.12] px-3 text-xs text-muted-foreground shadow-sm sm:min-w-[200px] sm:flex-initial">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           Loading models...
         </div>
       ) : showSearchable ? (
@@ -123,7 +124,7 @@ export function ModelSelector({
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className="h-9 min-w-0 flex-1 justify-between text-xs font-normal !bg-transparent !border-border sm:min-w-[200px] sm:flex-initial"
+              className="h-9 min-w-0 flex-1 justify-between rounded-full text-xs font-normal !border-border/55 !bg-black/[0.12] shadow-sm sm:min-w-[200px] sm:flex-initial"
             >
               <span className="truncate">
                 {model || "Select model..."}
@@ -156,7 +157,7 @@ export function ModelSelector({
         </Popover>
       ) : models.length > 0 ? (
         <Select value={model} onValueChange={onModelChange}>
-          <SelectTrigger className="h-9 min-w-0 flex-1 text-xs !border-border !bg-transparent sm:min-w-[200px] sm:flex-initial">
+          <SelectTrigger className="h-9 min-w-0 flex-1 rounded-full text-xs !border-border/55 !bg-black/[0.12] shadow-sm sm:min-w-[200px] sm:flex-initial">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
@@ -172,7 +173,7 @@ export function ModelSelector({
           value={model}
           onChange={e => onModelChange(e.target.value)}
           placeholder="Enter model ID..."
-          className="h-9 min-w-0 flex-1 text-xs border-border bg-transparent sm:min-w-[200px] sm:flex-initial"
+          className="h-9 min-w-0 flex-1 rounded-full border-border/55 bg-black/[0.12] text-xs shadow-sm sm:min-w-[200px] sm:flex-initial"
         />
       )}
     </div>

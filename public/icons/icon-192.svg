@@ -1,13 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
   <defs>
-    <linearGradient id="jetllm-plane-192" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="jetllm-jet-192" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#22c55e"/>
       <stop offset="100%" stop-color="#16a34a"/>
     </linearGradient>
+    <filter id="jetllm-jet-glow-192" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.13 0 0 0 0 0.77 0 0 0 0 0.37 0 0 0 0.55 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
   <rect width="192" height="192" fill="#000000" rx="32"/>
-  <g transform="translate(-9 -9) scale(2)">
-    <path d="M85 20 L70 80 L50 60 L20 70 Z" fill="url(#jetllm-plane-192)"/>
-    <path d="M85 20 L50 60 L50 85 Z" fill="#22c55e" opacity="0.45"/>
+  <circle cx="96" cy="96" r="68" fill="#22c55e" opacity="0.08"/>
+  <g transform="translate(18 18) scale(1.56)" filter="url(#jetllm-jet-glow-192)">
+    <path d="M12 50 L53 41 L92 50 L53 59 Z" fill="url(#jetllm-jet-192)"/>
+    <path d="M48 42 L29 17 L44 15 L72 43 Z" fill="url(#jetllm-jet-192)"/>
+    <path d="M48 58 L29 83 L44 85 L72 57 Z" fill="url(#jetllm-jet-192)" opacity="0.86"/>
+    <path d="M24 48 L10 35 L24 37 L39 45 Z" fill="url(#jetllm-jet-192)" opacity="0.9"/>
+    <path d="M24 52 L10 65 L24 63 L39 55 Z" fill="url(#jetllm-jet-192)" opacity="0.8"/>
+    <path d="M66 48 L83 50 L66 52 L57 50 Z" fill="#020402" opacity="0.36"/>
+    <path d="M15 50 H2" stroke="#22c55e" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
   </g>
 </svg>

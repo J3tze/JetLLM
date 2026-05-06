@@ -1,4 +1,5 @@
-import { streamText, UIMessage, convertToModelMessages, getTextFromDataUrl, tool } from "ai"
+import { streamText, convertToModelMessages, getTextFromDataUrl, tool } from "ai"
+import type { UIMessage } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/providers"
 import { addMessage, deleteLatestAssistantMessage, getConversation } from "@/lib/conversations"
@@ -10,60 +11,62 @@ import { getProject } from "@/lib/projects"
 import { searchDocuments, formatRagContext } from "@/lib/rag/search"
 import { autoTitleConversation } from "@/lib/conversations/auto-title"
 import { getCurrentUserFromRequest } from "@/lib/auth-server"
+import {
+  MAX_CHAT_ATTACHMENT_DATA_URL_CHARS,
+  MAX_TEXT_ATTACHMENT_CHARS,
+  MAX_TOTAL_TEXT_ATTACHMENT_CHARS,
+  isImageAttachment,
+  isTextDocument,
+} from "@/lib/chat-attachments"
+import { normalizeThinkingLevel, type ThinkingLevel } from "@/lib/thinking"
 
 export const maxDuration = 60
 
-// Only enable thinking for DIRECT Anthropic provider, not OpenRouter/other proxies
-const THINKING_MODEL_PATTERNS = [
+const DEFAULT_TEMPERATURE = 0.7
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096
+const THINKING_MAX_OUTPUT_TOKENS = 16384
+
+// Only enable thinking for direct providers, not OpenRouter/other proxies.
+const ANTHROPIC_THINKING_MODEL_PATTERNS = [
   /^claude-sonnet-4/,
   /^claude-opus-4/,
 ]
-const TEXT_FILE_MEDIA_TYPES = new Set([
-  "application/json",
-  "application/xml",
-  "application/javascript",
-  "application/x-javascript",
-  "application/sql",
-  "application/x-sh",
-  "application/x-httpd-php",
-  "application/x-yaml",
-  "application/yaml",
-])
 
-const TEXT_FILE_EXTENSIONS = new Set([
-  "txt",
-  "md",
-  "markdown",
-  "csv",
-  "tsv",
-  "json",
-  "xml",
-  "yaml",
-  "yml",
-  "log",
-  "html",
-  "htm",
-  "css",
-  "js",
-  "ts",
-  "tsx",
-  "jsx",
-  "py",
-  "java",
-  "c",
-  "cpp",
-  "h",
-  "hpp",
-  "rs",
-  "go",
-  "sql",
-  "sh",
-  "ps1",
-])
+const OPENAI_REASONING_MODEL_PATTERNS = [
+  /^(?:o1|o3|o4)(?:$|[-_])/i,
+  /^gpt-5(?:$|[-_])/i,
+]
 
+const ANTHROPIC_THINKING_BUDGETS: Record<Exclude<ThinkingLevel, "off">, number> = {
+  low: 1024,
+  medium: 4096,
+  high: 10000,
+}
+
+type ThinkingProviderOptions = {
+  anthropic?: {
+    thinking: { type: "enabled"; budgetTokens: number }
+  }
+  openai?: {
+    reasoningEffort: Exclude<ThinkingLevel, "off">
+  }
+}
+
+type ThinkingRequestConfig = {
+  providerOptions?: ThinkingProviderOptions
+  omitSampling: boolean
+  maxOutputTokens?: number
+}
 type PersistedMessagePart = {
   type: string
   [key: string]: unknown
+}
+
+type ChatFilePart = {
+  type: "file"
+  mediaType?: unknown
+  filename?: unknown
+  url?: unknown
 }
 
 type RagModelConfig = {
@@ -80,25 +83,56 @@ type ChatRouteConfig = {
   providerConfig: ProviderConfig | null
 }
 
-function isThinkingModel(modelId: string): boolean {
-  return THINKING_MODEL_PATTERNS.some(p => p.test(modelId))
+function isAnthropicThinkingModel(modelId: string): boolean {
+  return ANTHROPIC_THINKING_MODEL_PATTERNS.some(p => p.test(modelId))
 }
 
-function getFileExtension(filename: string): string {
-  const dotIndex = filename.lastIndexOf(".")
-  return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : ""
+function isOpenAIReasoningModel(modelId: string): boolean {
+  return OPENAI_REASONING_MODEL_PATTERNS.some(p => p.test(modelId))
+}
+
+function buildThinkingRequestConfig(
+  provider: string,
+  modelId: string,
+  level: ThinkingLevel,
+  requestedMaxOutputTokens?: number
+): ThinkingRequestConfig {
+  if (level === "off") {
+    return { omitSampling: false }
+  }
+
+  if (provider === "anthropic" && isAnthropicThinkingModel(modelId)) {
+    const budgetTokens = ANTHROPIC_THINKING_BUDGETS[level]
+    return {
+      providerOptions: {
+        anthropic: {
+          thinking: { type: "enabled", budgetTokens },
+        },
+      },
+      omitSampling: true,
+      maxOutputTokens: Math.max(requestedMaxOutputTokens ?? THINKING_MAX_OUTPUT_TOKENS, budgetTokens + 1024),
+    }
+  }
+
+  if (provider === "openai" && isOpenAIReasoningModel(modelId)) {
+    return {
+      providerOptions: {
+        openai: {
+          reasoningEffort: level,
+        },
+      },
+      omitSampling: true,
+      maxOutputTokens: requestedMaxOutputTokens ?? THINKING_MAX_OUTPUT_TOKENS,
+    }
+  }
+
+  return { omitSampling: false }
 }
 
 function isTextDocumentFilePart(part: { mediaType?: unknown; filename?: unknown }): boolean {
   const mediaType = typeof part.mediaType === "string" ? part.mediaType.toLowerCase() : ""
-  if (mediaType.startsWith("text/")) {
-    return true
-  }
-  if (TEXT_FILE_MEDIA_TYPES.has(mediaType)) {
-    return true
-  }
   const filename = typeof part.filename === "string" ? part.filename : ""
-  return filename ? TEXT_FILE_EXTENSIONS.has(getFileExtension(filename)) : false
+  return isTextDocument(mediaType, filename)
 }
 
 function getFilePartText(part: { url?: unknown }): string {
@@ -110,6 +144,102 @@ function getFilePartText(part: { url?: unknown }): string {
   } catch {
     return ""
   }
+}
+
+function getFilePartLabel(part: { filename?: unknown; mediaType?: unknown }): string {
+  const filename = typeof part.filename === "string" && part.filename.trim()
+    ? part.filename.trim()
+    : "attachment"
+  const mediaType = typeof part.mediaType === "string" && part.mediaType.trim()
+    ? part.mediaType.trim()
+    : "unknown type"
+  return `${filename} (${mediaType})`
+}
+
+function createAttachmentTextPart(text: string): UIMessage["parts"][number] {
+  return { type: "text", text } as UIMessage["parts"][number]
+}
+
+function validateIncomingAttachments(messages: UIMessage[]): Response | null {
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (part.type !== "file") continue
+      const filePart = part as ChatFilePart
+      if (typeof filePart.url !== "string" || !filePart.url.startsWith("data:")) continue
+      if (filePart.url.length > MAX_CHAT_ATTACHMENT_DATA_URL_CHARS) {
+        return new Response(
+          JSON.stringify({
+            error: `Attachment ${getFilePartLabel(filePart)} is too large to send reliably. Use a smaller file or split it into sections.`,
+          }),
+          { status: 413, headers: { "Content-Type": "application/json" } }
+        )
+      }
+    }
+  }
+
+  return null
+}
+
+function normalizeTextFilePartForModel(
+  part: ChatFilePart,
+  remainingTextChars: { value: number }
+): UIMessage["parts"][number] {
+  const label = getFilePartLabel(part)
+  const text = getFilePartText(part)
+
+  if (!text) {
+    return createAttachmentTextPart(`[Attached text file: ${label}. The file could not be decoded, so its contents were not included.]`)
+  }
+
+  if (remainingTextChars.value <= 0) {
+    return createAttachmentTextPart(`[Attached text file: ${label}. Contents omitted because the per-message attachment text limit was reached.]`)
+  }
+
+  const charLimit = Math.min(MAX_TEXT_ATTACHMENT_CHARS, remainingTextChars.value)
+  const includedText = text.slice(0, charLimit)
+  remainingTextChars.value -= includedText.length
+
+  const omittedChars = text.length - includedText.length
+  const truncationNote = omittedChars > 0
+    ? `\n\n[Attachment truncated: ${omittedChars.toLocaleString()} characters omitted to keep the chat responsive.]`
+    : ""
+
+  return createAttachmentTextPart(`Attached text file: ${label}\n\n${includedText}${truncationNote}`)
+}
+
+function normalizeMessagePartsForModel(messages: UIMessage[]): UIMessage[] {
+  const remainingTextChars = { value: MAX_TOTAL_TEXT_ATTACHMENT_CHARS }
+
+  return messages.map((message) => {
+    const sourceParts = message.parts && message.parts.length > 0
+      ? message.parts
+      : [{ type: "text" as const, text: getMessageText(message) }]
+
+    const parts = sourceParts.flatMap((part): UIMessage["parts"] => {
+      if (part.type !== "file") {
+        return [part] as UIMessage["parts"]
+      }
+
+      const filePart = part as ChatFilePart
+      const mediaType = typeof filePart.mediaType === "string" ? filePart.mediaType : ""
+      const filename = typeof filePart.filename === "string" ? filePart.filename : undefined
+
+      if (isTextDocument(mediaType, filename)) {
+        return [normalizeTextFilePartForModel(filePart, remainingTextChars)] as UIMessage["parts"]
+      }
+
+      if (mediaType && isImageAttachment(mediaType)) {
+        return [part] as UIMessage["parts"]
+      }
+
+      return [createAttachmentTextPart(`[Attached file: ${getFilePartLabel(filePart)}. This file type is not supported by the selected model and was not sent as raw binary.]`)] as UIMessage["parts"]
+    })
+
+    return {
+      ...message,
+      parts,
+    }
+  })
 }
 
 function getMessageText(message: UIMessage): string {
@@ -258,6 +388,7 @@ export async function POST(req: Request) {
       maxTokens: maxOutputTokens,
       topP,
       webSearch,
+      thinkingLevel: rawThinkingLevel,
       trigger,
     } = body as {
       messages: UIMessage[]
@@ -268,6 +399,7 @@ export async function POST(req: Request) {
       maxTokens?: number
       topP?: number
       webSearch?: boolean
+      thinkingLevel?: unknown
       trigger?: string
     }
 
@@ -291,20 +423,28 @@ export async function POST(req: Request) {
       deleteLatestAssistantMessage(conversationId)
     }
 
+    if (!Array.isArray(messages)) {
+      return new Response(JSON.stringify({ error: "messages must be an array" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    const attachmentValidationError = validateIncomingAttachments(messages)
+    if (attachmentValidationError) {
+      return attachmentValidationError
+    }
+
     const conversation = conversationId ? getConversation(conversationId) : undefined
     const userMessages = messages.filter(m => m.role === "user")
     const lastUserMessage = userMessages[userMessages.length - 1]
     const lastUserText = lastUserMessage ? getMessageText(lastUserMessage) : ""
     const firstUserText = userMessages[0] ? getMessageText(userMessages[0]) : ""
     const isFirstAssistantTurn = userMessages.length > 0 && messages.every(m => m.role !== "assistant")
-    const modelMessages = messages.map(m => ({
-      ...m,
-      parts: (m.parts && m.parts.length > 0)
-        ? m.parts
-        : [{ type: "text" as const, text: getMessageText(m) }],
-    }))
+    const modelMessages = normalizeMessagePartsForModel(messages)
     const chatConfig = loadChatRouteConfig(provider)
     const ragProviderConfig = loadRagProviderConfig(chatConfig.ragModel, provider, chatConfig.providerConfig)
+    const thinkingLevel = normalizeThinkingLevel(rawThinkingLevel)
 
     // Build system prompt: custom setting > conversation-level > default
     let systemPrompt = chatConfig.customSystemPrompt || "You are a helpful AI assistant."
@@ -379,8 +519,7 @@ export async function POST(req: Request) {
     }
 
     const llmModel = getModel(provider, modelId, { config: chatConfig.providerConfig })
-    // Only treat as thinking model when using direct Anthropic provider
-    const thinking = provider === "anthropic" && isThinkingModel(modelId)
+    const thinkingConfig = buildThinkingRequestConfig(provider, modelId, thinkingLevel, maxOutputTokens)
 
     const result = streamText({
       model: llmModel,
@@ -406,22 +545,15 @@ export async function POST(req: Request) {
         },
         maxSteps: 3,
       } : {}),
-      // Thinking models don't support temperature/topP
-      ...(thinking
-        ? { maxOutputTokens: maxOutputTokens ?? 16384 }
+      // Reasoning/thinking models often reject normal sampling params.
+      ...(thinkingConfig.omitSampling
+        ? { maxOutputTokens: thinkingConfig.maxOutputTokens ?? maxOutputTokens ?? THINKING_MAX_OUTPUT_TOKENS }
         : {
-          temperature: temperature ?? 0.7,
-          maxOutputTokens: maxOutputTokens ?? 4096,
+          temperature: temperature ?? DEFAULT_TEMPERATURE,
+          maxOutputTokens: maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
           topP: topP ?? 1,
         }),
-      // Enable thinking for direct Anthropic provider
-      ...(thinking && {
-        providerOptions: {
-          anthropic: {
-            thinking: { type: "enabled" as const, budgetTokens: 10000 },
-          },
-        },
-      }),
+      ...(thinkingConfig.providerOptions ? { providerOptions: thinkingConfig.providerOptions } : {}),
       onFinish: async (event) => {
         const text = event.text ?? ""
         const toolResults = Array.isArray(event.toolResults)
@@ -473,7 +605,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Internal server error",
-        stack: error instanceof Error ? error.stack : undefined
+        ...(process.env.NODE_ENV === "development" && error instanceof Error ? { stack: error.stack } : {}),
       }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     )
