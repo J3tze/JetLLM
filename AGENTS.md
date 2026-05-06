@@ -228,6 +228,8 @@ Path alias: `@` maps to `src/`.
 - Added a chat thinking-level toggle across `src/lib/thinking.ts`, `src/components/chat/chat-input.tsx`, `src/components/chat/chat-panel.tsx`, and `src/app/api/chat/route.ts`; Off/Low/Medium/High now maps to direct Anthropic thinking budgets and direct OpenAI reasoning effort where supported, while proxy/non-reasoning providers safely ignore it.
 - Verified the agreed default wallpaper remains tracked as `public/default-wallpaper.jpg` and already matches `github/master` (`da884e9`), so no wallpaper asset restore was needed before the push.
 - Reworked JetLLM SVG branding in `src/components/jetllm-logo.tsx`, `public/icons/icon-192.svg`, and `public/icons/icon-512.svg` from the old paper-plane mark into a green swept-wing jet aircraft silhouette so the app/logo/PWA icon better match the JetLLM name.
+- Deployed commit `76365c0` to the VPS after the GitLab `deploy_vps` job failed on private-registry auth (`registry.gitlab.com` unauthorized): used the documented SSH fallback to sync a clean archive to `/opt/jetllm`, build `ghcr.io/j3tze/jetllm:latest` locally, restart compose with `--pull never`, and verify `/login` returns `200 OK` on `127.0.0.1:3000`.
+- Future CI follow-up: restore/adjust the GitHub Actions/GHCR deployment path now that GitHub access is working again, so the project is not dependent on the GitLab registry credentials that caused the VPS deploy failure.
 
 ## Local Service Inventory
 
