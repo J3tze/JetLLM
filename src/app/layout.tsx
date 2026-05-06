@@ -9,6 +9,13 @@ export const metadata: Metadata = {
   title: "JetLLM",
   description: "A sleek, feature-rich LLM web UI",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/icons/icon-192.svg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -230,6 +230,7 @@ Path alias: `@` maps to `src/`.
 - Reworked JetLLM SVG branding in `src/components/jetllm-logo.tsx`, `public/icons/icon-192.svg`, and `public/icons/icon-512.svg` from the old paper-plane mark into a green swept-wing jet aircraft silhouette so the app/logo/PWA icon better match the JetLLM name.
 - Deployed commit `76365c0` to the VPS after the GitLab `deploy_vps` job failed on private-registry auth (`registry.gitlab.com` unauthorized): used the documented SSH fallback to sync a clean archive to `/opt/jetllm`, build `ghcr.io/j3tze/jetllm:latest` locally, restart compose with `--pull never`, and verify `/login` returns `200 OK` on `127.0.0.1:3000`.
 - Future CI follow-up: restore/adjust the GitHub Actions/GHCR deployment path now that GitHub access is working again, so the project is not dependent on the GitLab registry credentials that caused the VPS deploy failure.
+- Replaced the browser tab favicon in `src/app/favicon.ico` and added `src/app/icon.svg` plus explicit `metadata.icons` wiring in `src/app/layout.tsx` so modern browsers and ICO fallbacks use the green jet aircraft mark instead of the old paper-plane favicon.
 
 ## Local Service Inventory
 
