@@ -235,6 +235,7 @@ Path alias: `@` maps to `src/`.
 ## Recent Updates (2026-05-07)
 
 - Switched the production build script in `package.json` to `next build --webpack` after the VPS Docker no-cache rebuild hit a Turbopack internal panic and the running standalone image lacked `/app/.next/server/app/icon.svg.body`; local webpack build now completes and emits the `/icon.svg` route, preserving the new browser-tab jet icon in standalone output.
+- Deployed commit `84c2812` to the VPS with the manual archive fallback after normalizing `docker-entrypoint.sh` line endings on `/opt/jetllm`; verified the replacement container is up, `/login`, `/icon.svg`, and `/favicon.ico` return `200 OK`, and the running standalone image contains both icon route body files.
 
 ## Local Service Inventory
 
