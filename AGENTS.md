@@ -232,6 +232,10 @@ Path alias: `@` maps to `src/`.
 - Future CI follow-up: restore/adjust the GitHub Actions/GHCR deployment path now that GitHub access is working again, so the project is not dependent on the GitLab registry credentials that caused the VPS deploy failure.
 - Replaced the browser tab favicon in `src/app/favicon.ico` and added `src/app/icon.svg` plus explicit `metadata.icons` wiring in `src/app/layout.tsx` so modern browsers and ICO fallbacks use the green jet aircraft mark instead of the old paper-plane favicon.
 
+## Recent Updates (2026-05-07)
+
+- Switched the production build script in `package.json` to `next build --webpack` after the VPS Docker no-cache rebuild hit a Turbopack internal panic and the running standalone image lacked `/app/.next/server/app/icon.svg.body`; local webpack build now completes and emits the `/icon.svg` route, preserving the new browser-tab jet icon in standalone output.
+
 ## Local Service Inventory
 
 - JetLLM local compose in this repo binds host port `3000` to container port `3000` via `docker-compose.yml`.
