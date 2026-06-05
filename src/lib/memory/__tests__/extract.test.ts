@@ -25,6 +25,8 @@ import { getModel } from "@/lib/providers"
 import { listMemories, createMemory, memoryExistsByContent } from "@/lib/memory"
 import { getMessages } from "@/lib/conversations"
 
+const USER_ID = "user-1"
+
 function mockMessage(role: string, content: string) {
   return { id: "1", conversationId: "c1", role, content, toolCalls: null, metadata: null, createdAt: new Date() }
 }
@@ -39,7 +41,7 @@ describe("extractMemories", () => {
       if (key === "memory:enabled") return false
       return null
     })
-    await extractMemories("conv-1")
+    await extractMemories("conv-1", USER_ID)
     expect(generateText).not.toHaveBeenCalled()
   })
 
@@ -49,7 +51,7 @@ describe("extractMemories", () => {
       if (key === "memory:model") return null
       return null
     })
-    await extractMemories("conv-1")
+    await extractMemories("conv-1", USER_ID)
     expect(generateText).not.toHaveBeenCalled()
   })
 
@@ -60,7 +62,8 @@ describe("extractMemories", () => {
       return null
     })
     vi.mocked(getMessages).mockReturnValue([mockMessage("user", "hi")] as never)
-    await extractMemories("conv-1")
+    await extractMemories("conv-1", USER_ID)
+    expect(getMessages).toHaveBeenCalledWith("conv-1", USER_ID)
     expect(generateText).not.toHaveBeenCalled()
   })
 
@@ -81,9 +84,12 @@ describe("extractMemories", () => {
       text: '[{"type":"fact","content":"User\'s name is Jetze"}]',
     } as never)
 
-    await extractMemories("c1")
+    await extractMemories("c1", USER_ID)
 
+    expect(listMemories).toHaveBeenCalledWith(USER_ID)
+    expect(memoryExistsByContent).toHaveBeenCalledWith("User's name is Jetze", USER_ID)
     expect(createMemory).toHaveBeenCalledWith({
+      userId: USER_ID,
       type: "fact",
       content: "User's name is Jetze",
       sourceConversationId: "c1",
@@ -107,7 +113,8 @@ describe("extractMemories", () => {
       text: '[{"type":"fact","content":"Already exists"}]',
     } as never)
 
-    await extractMemories("c1")
+    await extractMemories("c1", USER_ID)
+    expect(memoryExistsByContent).toHaveBeenCalledWith("Already exists", USER_ID)
     expect(createMemory).not.toHaveBeenCalled()
   })
 
@@ -127,7 +134,7 @@ describe("extractMemories", () => {
       text: "I couldn't extract anything meaningful here.",
     } as never)
 
-    await expect(extractMemories("c1")).resolves.not.toThrow()
+    await expect(extractMemories("c1", USER_ID)).resolves.not.toThrow()
     expect(createMemory).not.toHaveBeenCalled()
   })
 
@@ -148,8 +155,9 @@ describe("extractMemories", () => {
       text: '```json\n[{"type":"fact","content":"User works at Acme"}]\n```',
     } as never)
 
-    await extractMemories("c1")
+    await extractMemories("c1", USER_ID)
     expect(createMemory).toHaveBeenCalledWith({
+      userId: USER_ID,
       type: "fact",
       content: "User works at Acme",
       sourceConversationId: "c1",

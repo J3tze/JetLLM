@@ -7,20 +7,43 @@ import { getDb } from "@/lib/db"
 export type Conversation = typeof schema.conversations.$inferSelect
 export type Message = typeof schema.messages.$inferSelect
 
+function getOwnedConversation(
+  db: BetterSQLite3Database<typeof schema>,
+  id: string,
+  userId: string
+): Conversation | undefined {
+  return db.select()
+    .from(schema.conversations)
+    .where(and(eq(schema.conversations.id, id), eq(schema.conversations.userId, userId)))
+    .get()
+}
+
 export function createConversationsService(db: BetterSQLite3Database<typeof schema>) {
   return {
     create(data: {
+      userId: string
       model: string
       provider: string
       title?: string
       systemPrompt?: string
       projectId?: string
     }): Conversation {
+      if (data.projectId) {
+        const project = db.select()
+          .from(schema.projects)
+          .where(and(eq(schema.projects.id, data.projectId), eq(schema.projects.userId, data.userId)))
+          .get()
+        if (!project) {
+          throw new Error("Project not found")
+        }
+      }
+
       const id = ulid()
       const now = new Date()
       db.insert(schema.conversations)
         .values({
           id,
+          userId: data.userId,
           title: data.title || "New Chat",
           model: data.model,
           provider: data.provider,
@@ -33,26 +56,36 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
       return db.select().from(schema.conversations).where(eq(schema.conversations.id, id)).get()!
     },
 
-    list(): Conversation[] {
-      return db.select().from(schema.conversations).orderBy(desc(schema.conversations.isPinned), desc(schema.conversations.updatedAt)).all()
+    list(userId: string): Conversation[] {
+      return db.select()
+        .from(schema.conversations)
+        .where(eq(schema.conversations.userId, userId))
+        .orderBy(desc(schema.conversations.isPinned), desc(schema.conversations.updatedAt))
+        .all()
     },
 
-    get(id: string): Conversation | undefined {
-      return db.select().from(schema.conversations).where(eq(schema.conversations.id, id)).get()
+    get(id: string, userId: string): Conversation | undefined {
+      return getOwnedConversation(db, id, userId)
     },
 
-    update(id: string, data: Partial<{ title: string; model: string; provider: string; systemPrompt: string | null; isPinned: boolean }>): void {
+    update(id: string, userId: string, data: Partial<{ title: string; model: string; provider: string; systemPrompt: string | null; isPinned: boolean }>): void {
       db.update(schema.conversations)
         .set({ ...data, updatedAt: new Date() })
-        .where(eq(schema.conversations.id, id))
+        .where(and(eq(schema.conversations.id, id), eq(schema.conversations.userId, userId)))
         .run()
     },
 
-    delete(id: string): void {
-      db.delete(schema.conversations).where(eq(schema.conversations.id, id)).run()
+    delete(id: string, userId: string): void {
+      db.delete(schema.conversations)
+        .where(and(eq(schema.conversations.id, id), eq(schema.conversations.userId, userId)))
+        .run()
     },
 
-    getMessages(conversationId: string): Message[] {
+    getMessages(conversationId: string, userId: string): Message[] {
+      if (!getOwnedConversation(db, conversationId, userId)) {
+        return []
+      }
+
       return db.select().from(schema.messages)
         .where(eq(schema.messages.conversationId, conversationId))
         .orderBy(schema.messages.createdAt)
@@ -60,12 +93,17 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
     },
 
     addMessage(data: {
+      userId: string
       conversationId: string
       role: "user" | "assistant" | "system" | "tool"
       content: string
       toolCalls?: string
       metadata?: string
     }): Message {
+      if (!getOwnedConversation(db, data.conversationId, data.userId)) {
+        throw new Error("Conversation not found")
+      }
+
       const id = ulid()
       db.insert(schema.messages)
         .values({
@@ -80,12 +118,16 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
         .run()
       db.update(schema.conversations)
         .set({ updatedAt: new Date() })
-        .where(eq(schema.conversations.id, data.conversationId))
+        .where(and(eq(schema.conversations.id, data.conversationId), eq(schema.conversations.userId, data.userId)))
         .run()
       return db.select().from(schema.messages).where(eq(schema.messages.id, id)).get()!
     },
 
-    deleteLatestAssistantMessage(conversationId: string): void {
+    deleteLatestAssistantMessage(conversationId: string, userId: string): void {
+      if (!getOwnedConversation(db, conversationId, userId)) {
+        return
+      }
+
       const latestAssistant = db.select().from(schema.messages)
         .where(and(
           eq(schema.messages.conversationId, conversationId),
@@ -102,7 +144,7 @@ export function createConversationsService(db: BetterSQLite3Database<typeof sche
 
       db.update(schema.conversations)
         .set({ updatedAt: new Date() })
-        .where(eq(schema.conversations.id, conversationId))
+        .where(and(eq(schema.conversations.id, conversationId), eq(schema.conversations.userId, userId)))
         .run()
     },
   }
@@ -113,30 +155,30 @@ export function createConversation(data: Parameters<ReturnType<typeof createConv
   return createConversationsService(getDb()).create(data)
 }
 
-export function listConversations() {
-  return createConversationsService(getDb()).list()
+export function listConversations(userId: string) {
+  return createConversationsService(getDb()).list(userId)
 }
 
-export function getConversation(id: string) {
-  return createConversationsService(getDb()).get(id)
+export function getConversation(id: string, userId: string) {
+  return createConversationsService(getDb()).get(id, userId)
 }
 
-export function updateConversation(id: string, data: Parameters<ReturnType<typeof createConversationsService>["update"]>[1]) {
-  return createConversationsService(getDb()).update(id, data)
+export function updateConversation(id: string, userId: string, data: Parameters<ReturnType<typeof createConversationsService>["update"]>[2]) {
+  return createConversationsService(getDb()).update(id, userId, data)
 }
 
-export function deleteConversation(id: string) {
-  return createConversationsService(getDb()).delete(id)
+export function deleteConversation(id: string, userId: string) {
+  return createConversationsService(getDb()).delete(id, userId)
 }
 
-export function getMessages(conversationId: string) {
-  return createConversationsService(getDb()).getMessages(conversationId)
+export function getMessages(conversationId: string, userId: string) {
+  return createConversationsService(getDb()).getMessages(conversationId, userId)
 }
 
 export function addMessage(data: Parameters<ReturnType<typeof createConversationsService>["addMessage"]>[0]) {
   return createConversationsService(getDb()).addMessage(data)
 }
 
-export function deleteLatestAssistantMessage(conversationId: string) {
-  return createConversationsService(getDb()).deleteLatestAssistantMessage(conversationId)
+export function deleteLatestAssistantMessage(conversationId: string, userId: string) {
+  return createConversationsService(getDb()).deleteLatestAssistantMessage(conversationId, userId)
 }

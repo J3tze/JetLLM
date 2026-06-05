@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto"
-import { and, eq, gt } from "drizzle-orm"
+import { and, count, eq, gt } from "drizzle-orm"
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import { ulid } from "ulid"
 import * as schema from "@/lib/db/schema"
@@ -33,6 +33,10 @@ function toSafeUser(user: User): SafeUser {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash, ...safeUser } = user
   return safeUser
+}
+
+export function publicSignupsEnabled(): boolean {
+  return process.env.ALLOW_PUBLIC_SIGNUPS === "true"
 }
 
 export function hashPassword(password: string): string {
@@ -108,6 +112,20 @@ export function createAuthService(db: BetterSQLite3Database<typeof schema>) {
       return user ? toSafeUser(user) : null
     },
 
+    getUserCount(): number {
+      const [result] = db.select({ count: count() }).from(schema.users).all()
+      return result.count
+    },
+
+    isPrimaryUser(userId: string): boolean {
+      const user = db.select()
+        .from(schema.users)
+        .orderBy(schema.users.createdAt, schema.users.id)
+        .limit(1)
+        .get()
+      return user?.id === userId
+    },
+
     validateCredentials(email: string, password: string): SafeUser | null {
       const normalized = normalizeEmail(email)
       const user = db.select().from(schema.users).where(eq(schema.users.email, normalized)).get()
@@ -173,6 +191,14 @@ export function createUser(input: CreateUserInput): SafeUser {
 
 export function getUserByEmail(email: string): SafeUser | null {
   return createAuthService(getDb()).getUserByEmail(email)
+}
+
+export function getUserCount(): number {
+  return createAuthService(getDb()).getUserCount()
+}
+
+export function isPrimaryUser(userId: string): boolean {
+  return createAuthService(getDb()).isPrimaryUser(userId)
 }
 
 export function validateCredentials(email: string, password: string): SafeUser | null {

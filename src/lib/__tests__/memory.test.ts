@@ -5,6 +5,25 @@ import * as schema from "../db/schema"
 import { createMemoryService } from "../memory"
 import { createConversationsService } from "../conversations"
 
+const USER_ID = "user-1"
+const OTHER_USER_ID = "user-2"
+
+type RawMemoryService = ReturnType<typeof createMemoryService>
+type RawConversationsService = ReturnType<typeof createConversationsService>
+type OwnedMemoryService = {
+  create(data: Omit<Parameters<RawMemoryService["create"]>[0], "userId">): ReturnType<RawMemoryService["create"]>
+  list(): ReturnType<RawMemoryService["list"]>
+  get(id: string): ReturnType<RawMemoryService["get"]>
+  update(id: string, data: Parameters<RawMemoryService["update"]>[2]): ReturnType<RawMemoryService["update"]>
+  delete(id: string): ReturnType<RawMemoryService["delete"]>
+  existsByContent(content: string): ReturnType<RawMemoryService["existsByContent"]>
+  getFormattedForInjection(maxChars?: number): ReturnType<RawMemoryService["getFormattedForInjection"]>
+}
+type OwnedConversationsService = {
+  create(data: Omit<Parameters<RawConversationsService["create"]>[0], "userId">): ReturnType<RawConversationsService["create"]>
+  delete(id: string): ReturnType<RawConversationsService["delete"]>
+}
+
 function createTestDb() {
   const sqlite = new Database(":memory:")
   sqlite.pragma("journal_mode = WAL")
@@ -12,8 +31,18 @@ function createTestDb() {
   const db = drizzle({ client: sqlite, schema })
 
   sqlite.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT 'New Chat',
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
@@ -36,6 +65,7 @@ function createTestDb() {
 
     CREATE TABLE memories (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type TEXT NOT NULL CHECK(type IN ('fact', 'preference', 'summary')),
       content TEXT NOT NULL,
       source_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
@@ -46,21 +76,44 @@ function createTestDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    INSERT INTO users (id, email, display_name, password_hash, created_at, updated_at)
+    VALUES
+      ('${USER_ID}', 'user@example.com', 'User', 'hash', unixepoch(), unixepoch()),
+      ('${OTHER_USER_ID}', 'other@example.com', 'Other', 'hash', unixepoch(), unixepoch());
   `)
 
   return { db, sqlite }
 }
 
+function createOwnedConversationService(db: ReturnType<typeof createTestDb>["db"]): OwnedConversationsService {
+  const raw = createConversationsService(db)
+  return {
+    create: (data) => raw.create({ userId: USER_ID, ...data }),
+    delete: (id: string) => raw.delete(id, USER_ID),
+  }
+}
+
 describe("Memory Service", () => {
   let db: ReturnType<typeof createTestDb>["db"]
   let sqlite: Database.Database
-  let service: ReturnType<typeof createMemoryService>
+  let service: OwnedMemoryService
+  let rawService: ReturnType<typeof createMemoryService>
 
   beforeEach(() => {
     const result = createTestDb()
     db = result.db
     sqlite = result.sqlite
-    service = createMemoryService(db)
+    rawService = createMemoryService(db)
+    service = {
+      create: (data) => rawService.create({ userId: USER_ID, ...data }),
+      list: () => rawService.list(USER_ID),
+      get: (id: string) => rawService.get(id, USER_ID),
+      update: (id: string, data) => rawService.update(id, USER_ID, data),
+      delete: (id: string) => rawService.delete(id, USER_ID),
+      existsByContent: (content: string) => rawService.existsByContent(content, USER_ID),
+      getFormattedForInjection: (maxChars?: number) => rawService.getFormattedForInjection(USER_ID, maxChars),
+    }
   })
 
   afterEach(() => {
@@ -77,7 +130,7 @@ describe("Memory Service", () => {
     })
 
     it("creates a memory with sourceConversationId", () => {
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
       const conv = convService.create({ model: "gpt-4o", provider: "openai" })
       const memory = service.create({
         type: "preference",
@@ -106,6 +159,15 @@ describe("Memory Service", () => {
     it("returns empty array when no memories", () => {
       expect(service.list()).toEqual([])
     })
+
+    it("does not return memories owned by another user", () => {
+      service.create({ type: "fact", content: "Mine" })
+      rawService.create({ userId: OTHER_USER_ID, type: "fact", content: "Other" })
+
+      const memories = service.list()
+      expect(memories).toHaveLength(1)
+      expect(memories[0].content).toBe("Mine")
+    })
   })
 
   describe("get", () => {
@@ -117,6 +179,11 @@ describe("Memory Service", () => {
 
     it("returns undefined for missing id", () => {
       expect(service.get("nonexistent")).toBeUndefined()
+    })
+
+    it("returns undefined for another user's memory", () => {
+      const other = rawService.create({ userId: OTHER_USER_ID, type: "fact", content: "Other" })
+      expect(service.get(other.id)).toBeUndefined()
     })
   })
 
@@ -142,7 +209,7 @@ describe("Memory Service", () => {
     })
 
     it("memory persists when source conversation is deleted (FK set null)", () => {
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
       const conv = convService.create({ model: "gpt-4o", provider: "openai" })
       const memory = service.create({
         type: "fact",

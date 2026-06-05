@@ -4,6 +4,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3"
 import { sql } from "drizzle-orm"
 import * as schema from "../schema"
 
+const USER_ID = "user-1"
+
 function createTestDb() {
   const sqlite = new Database(":memory:")
   sqlite.pragma("journal_mode = WAL")
@@ -12,8 +14,18 @@ function createTestDb() {
 
   // Create tables manually for in-memory DB
   sqlite.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT 'New Chat',
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
@@ -38,6 +50,9 @@ function createTestDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    INSERT INTO users (id, email, display_name, password_hash, created_at, updated_at)
+    VALUES ('${USER_ID}', 'user@example.com', 'User', 'hash', unixepoch(), unixepoch());
   `)
 
   return { db, sqlite }
@@ -62,6 +77,7 @@ describe("Database Schema", () => {
       db.insert(schema.conversations)
         .values({
           id: "01ABC",
+          userId: USER_ID,
           model: "gpt-4o",
           provider: "openai",
         })
@@ -80,6 +96,7 @@ describe("Database Schema", () => {
       db.insert(schema.conversations)
         .values({
           id: "01DEF",
+          userId: USER_ID,
           model: "claude-sonnet-4-20250514",
           provider: "anthropic",
           systemPrompt: "You are a coding assistant.",
@@ -99,7 +116,7 @@ describe("Database Schema", () => {
   describe("messages table", () => {
     it("inserts a message linked to a conversation", () => {
       db.insert(schema.conversations)
-        .values({ id: "conv1", model: "gpt-4o", provider: "openai" })
+        .values({ id: "conv1", userId: USER_ID, model: "gpt-4o", provider: "openai" })
         .run()
 
       db.insert(schema.messages)
@@ -120,7 +137,7 @@ describe("Database Schema", () => {
 
     it("cascades deletes from conversation to messages", () => {
       db.insert(schema.conversations)
-        .values({ id: "conv2", model: "gpt-4o", provider: "openai" })
+        .values({ id: "conv2", userId: USER_ID, model: "gpt-4o", provider: "openai" })
         .run()
 
       db.insert(schema.messages)

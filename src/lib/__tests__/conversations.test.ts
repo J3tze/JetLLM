@@ -4,6 +4,21 @@ import { drizzle } from "drizzle-orm/better-sqlite3"
 import * as schema from "../db/schema"
 import { createConversationsService } from "../conversations"
 
+const USER_ID = "user-1"
+const OTHER_USER_ID = "user-2"
+
+type RawConversationsService = ReturnType<typeof createConversationsService>
+type OwnedConversationsService = {
+  create(data: Omit<Parameters<RawConversationsService["create"]>[0], "userId">): ReturnType<RawConversationsService["create"]>
+  list(): ReturnType<RawConversationsService["list"]>
+  get(id: string): ReturnType<RawConversationsService["get"]>
+  update(id: string, data: Parameters<RawConversationsService["update"]>[2]): ReturnType<RawConversationsService["update"]>
+  delete(id: string): ReturnType<RawConversationsService["delete"]>
+  getMessages(conversationId: string): ReturnType<RawConversationsService["getMessages"]>
+  addMessage(data: Omit<Parameters<RawConversationsService["addMessage"]>[0], "userId">): ReturnType<RawConversationsService["addMessage"]>
+  deleteLatestAssistantMessage(conversationId: string): ReturnType<RawConversationsService["deleteLatestAssistantMessage"]>
+}
+
 function createTestDb() {
   const sqlite = new Database(":memory:")
   sqlite.pragma("journal_mode = WAL")
@@ -11,8 +26,18 @@ function createTestDb() {
   const db = drizzle({ client: sqlite, schema })
 
   sqlite.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT 'New Chat',
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
@@ -37,6 +62,11 @@ function createTestDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    INSERT INTO users (id, email, display_name, password_hash, created_at, updated_at)
+    VALUES
+      ('${USER_ID}', 'user@example.com', 'User', 'hash', unixepoch(), unixepoch()),
+      ('${OTHER_USER_ID}', 'other@example.com', 'Other', 'hash', unixepoch(), unixepoch());
   `)
 
   return { db, sqlite }
@@ -45,13 +75,24 @@ function createTestDb() {
 describe("Conversations Service", () => {
   let db: ReturnType<typeof createTestDb>["db"]
   let sqlite: Database.Database
-  let service: ReturnType<typeof createConversationsService>
+  let service: OwnedConversationsService
+  let rawService: ReturnType<typeof createConversationsService>
 
   beforeEach(() => {
     const result = createTestDb()
     db = result.db
     sqlite = result.sqlite
-    service = createConversationsService(db)
+    rawService = createConversationsService(db)
+    service = {
+      create: (data) => rawService.create({ userId: USER_ID, ...data }),
+      list: () => rawService.list(USER_ID),
+      get: (id: string) => rawService.get(id, USER_ID),
+      update: (id: string, data) => rawService.update(id, USER_ID, data),
+      delete: (id: string) => rawService.delete(id, USER_ID),
+      getMessages: (conversationId: string) => rawService.getMessages(conversationId, USER_ID),
+      addMessage: (data) => rawService.addMessage({ userId: USER_ID, ...data }),
+      deleteLatestAssistantMessage: (conversationId: string) => rawService.deleteLatestAssistantMessage(conversationId, USER_ID),
+    }
   })
 
   afterEach(() => {
@@ -110,6 +151,15 @@ describe("Conversations Service", () => {
       const list = service.list()
       expect(list).toEqual([])
     })
+
+    it("does not return conversations owned by another user", () => {
+      service.create({ model: "gpt-4o", provider: "openai", title: "Mine" })
+      rawService.create({ userId: OTHER_USER_ID, model: "gpt-4o", provider: "openai", title: "Other" })
+
+      const list = service.list()
+      expect(list).toHaveLength(1)
+      expect(list[0].title).toBe("Mine")
+    })
   })
 
   describe("getConversation", () => {
@@ -125,6 +175,11 @@ describe("Conversations Service", () => {
     it("returns undefined for a missing id", () => {
       const found = service.get("nonexistent-id")
       expect(found).toBeUndefined()
+    })
+
+    it("returns undefined for another user's conversation", () => {
+      const other = rawService.create({ userId: OTHER_USER_ID, model: "gpt-4o", provider: "openai" })
+      expect(service.get(other.id)).toBeUndefined()
     })
   })
 
@@ -298,6 +353,18 @@ describe("Conversations Service", () => {
       const messages2 = service.getMessages(conv2.id)
       expect(messages2).toHaveLength(1)
       expect(messages2[0].content).toBe("Conv2 msg")
+    })
+
+    it("does not return messages for another user's conversation", () => {
+      const other = rawService.create({ userId: OTHER_USER_ID, model: "gpt-4o", provider: "openai" })
+      rawService.addMessage({
+        userId: OTHER_USER_ID,
+        conversationId: other.id,
+        role: "user",
+        content: "Private",
+      })
+
+      expect(service.getMessages(other.id)).toEqual([])
     })
   })
 

@@ -1,6 +1,12 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { getUserFromSessionToken, SESSION_COOKIE_NAME, type SafeUser } from "@/lib/auth"
+import {
+  getUserFromSessionToken,
+  isPrimaryUser,
+  publicSignupsEnabled,
+  SESSION_COOKIE_NAME,
+  type SafeUser,
+} from "@/lib/auth"
 
 function getCookieValue(header: string | null, name: string): string | null {
   if (!header) return null
@@ -24,14 +30,20 @@ function getCookieValue(header: string | null, name: string): string | null {
 export function getCurrentUserFromRequest(request: Request): SafeUser | null {
   const token = getCookieValue(request.headers.get("cookie"), SESSION_COOKIE_NAME)
   if (!token) return null
-  return getUserFromSessionToken(token)
+  const user = getUserFromSessionToken(token)
+  if (!user) return null
+  if (!publicSignupsEnabled() && !isPrimaryUser(user.id)) return null
+  return user
 }
 
 export async function getCurrentUser(): Promise<SafeUser | null> {
   const cookieStore = await cookies()
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value
   if (!token) return null
-  return getUserFromSessionToken(token)
+  const user = getUserFromSessionToken(token)
+  if (!user) return null
+  if (!publicSignupsEnabled() && !isPrimaryUser(user.id)) return null
+  return user
 }
 
 export async function requireCurrentUser(): Promise<SafeUser> {

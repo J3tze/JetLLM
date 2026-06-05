@@ -9,7 +9,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const projects = listProjects()
+    const projects = listProjects(user.id)
     return NextResponse.json(projects)
   } catch (error) {
     console.error("Failed to list projects:", error)
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { name, icon } = body
 
-    const project = createProject({ name, icon })
+    const project = createProject({ userId: user.id, name, icon })
     return NextResponse.json(project, { status: 201 })
   } catch (error) {
     if (error instanceof SyntaxError) {

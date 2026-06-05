@@ -12,7 +12,7 @@ export async function GET(
   }
 
   const { id } = await params
-  const memory = getMemory(id)
+  const memory = getMemory(id, user.id)
 
   if (!memory) {
     return NextResponse.json({ error: "Memory not found" }, { status: 404 })
@@ -31,7 +31,7 @@ export async function PATCH(
   }
 
   const { id } = await params
-  const memory = getMemory(id)
+  const memory = getMemory(id, user.id)
 
   if (!memory) {
     return NextResponse.json({ error: "Memory not found" }, { status: 404 })
@@ -40,8 +40,8 @@ export async function PATCH(
   const body = await request.json()
   const { content, type } = body
 
-  updateMemory(id, { content, type })
-  const updated = getMemory(id)
+  updateMemory(id, user.id, { content, type })
+  const updated = getMemory(id, user.id)
   return NextResponse.json(updated)
 }
 
@@ -55,12 +55,12 @@ export async function DELETE(
   }
 
   const { id } = await params
-  const memory = getMemory(id)
+  const memory = getMemory(id, user.id)
 
   if (!memory) {
     return NextResponse.json({ error: "Memory not found" }, { status: 404 })
   }
 
-  deleteMemory(id)
+  deleteMemory(id, user.id)
   return NextResponse.json({ success: true })
 }

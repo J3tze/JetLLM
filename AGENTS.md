@@ -254,6 +254,7 @@ Path alias: `@` maps to `src/`.
 - Replaced the default create-next-app text in `README.md` with GitHub-ready JetLLM documentation covering features, local setup, configuration, Docker/deploy links, project structure, security notes, and troubleshooting so the repository has a useful public entry point before bugfix and optimization work.
 - Upgraded the GitHub-facing repository presentation in `README.md` with centered branding, shields, preview screenshots, a highlights table, and cleaner deploy/setup sections, and added local artifact patterns to `.gitignore` so future logs/captures/SQLite files do not clutter public repo work.
 - Removed README screenshot references to old/error-state UI captures so the now-public GitHub repository presents clean documentation without misleading preview images.
+- Fixed cross-account data exposure across `src/lib/conversations.ts`, `src/lib/projects.ts`, `src/lib/memory.ts`, their API routes, and SQLite schema/bootstrap by adding `user_id` ownership, backfilling legacy rows to the first account, scoping chat/project/memory reads and writes by `user.id`, and locking default signup/login behavior to the primary account unless `ALLOW_PUBLIC_SIGNUPS=true`, so newly created accounts can no longer read existing chats.
 
 ## Local Service Inventory
 

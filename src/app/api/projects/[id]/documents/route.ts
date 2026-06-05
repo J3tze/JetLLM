@@ -39,7 +39,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -74,7 +74,7 @@ export async function POST(
     }
 
     const { id } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })

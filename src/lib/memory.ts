@@ -1,5 +1,5 @@
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
-import { eq, desc } from "drizzle-orm"
+import { and, eq, desc } from "drizzle-orm"
 import { sql } from "drizzle-orm"
 import { ulid } from "ulid"
 import * as schema from "@/lib/db/schema"
@@ -11,6 +11,7 @@ export type MemoryType = "fact" | "preference" | "summary"
 export function createMemoryService(db: BetterSQLite3Database<typeof schema>) {
   return {
     create(data: {
+      userId: string
       type: MemoryType
       content: string
       sourceConversationId?: string | null
@@ -19,6 +20,7 @@ export function createMemoryService(db: BetterSQLite3Database<typeof schema>) {
       db.insert(schema.memories)
         .values({
           id,
+          userId: data.userId,
           type: data.type,
           content: data.content,
           sourceConversationId: data.sourceConversationId || null,
@@ -28,39 +30,46 @@ export function createMemoryService(db: BetterSQLite3Database<typeof schema>) {
       return db.select().from(schema.memories).where(eq(schema.memories.id, id)).get()!
     },
 
-    list(): Memory[] {
+    list(userId: string): Memory[] {
       return db.select().from(schema.memories)
+        .where(eq(schema.memories.userId, userId))
         .orderBy(desc(schema.memories.createdAt), desc(schema.memories.id))
         .all()
     },
 
-    get(id: string): Memory | undefined {
+    get(id: string, userId: string): Memory | undefined {
       return db.select().from(schema.memories)
-        .where(eq(schema.memories.id, id))
+        .where(and(eq(schema.memories.id, id), eq(schema.memories.userId, userId)))
         .get()
     },
 
-    update(id: string, data: Partial<{ content: string; type: MemoryType }>): void {
+    update(id: string, userId: string, data: Partial<{ content: string; type: MemoryType }>): void {
       db.update(schema.memories)
         .set(data)
-        .where(eq(schema.memories.id, id))
+        .where(and(eq(schema.memories.id, id), eq(schema.memories.userId, userId)))
         .run()
     },
 
-    delete(id: string): void {
-      db.delete(schema.memories).where(eq(schema.memories.id, id)).run()
+    delete(id: string, userId: string): void {
+      db.delete(schema.memories)
+        .where(and(eq(schema.memories.id, id), eq(schema.memories.userId, userId)))
+        .run()
     },
 
-    existsByContent(content: string): boolean {
+    existsByContent(content: string, userId: string): boolean {
       const row = db.select()
         .from(schema.memories)
-        .where(sql`${schema.memories.content} = ${content} COLLATE NOCASE`)
+        .where(and(
+          eq(schema.memories.userId, userId),
+          sql`${schema.memories.content} = ${content} COLLATE NOCASE`
+        ))
         .get()
       return !!row
     },
 
-    getFormattedForInjection(maxChars: number = 2000): string {
+    getFormattedForInjection(userId: string, maxChars: number = 2000): string {
       const memories = db.select().from(schema.memories)
+        .where(eq(schema.memories.userId, userId))
         .orderBy(desc(schema.memories.createdAt), desc(schema.memories.id))
         .limit(50)
         .all()
@@ -83,26 +92,26 @@ export function createMemory(data: Parameters<ReturnType<typeof createMemoryServ
   return createMemoryService(getDb()).create(data)
 }
 
-export function listMemories() {
-  return createMemoryService(getDb()).list()
+export function listMemories(userId: string) {
+  return createMemoryService(getDb()).list(userId)
 }
 
-export function getMemory(id: string) {
-  return createMemoryService(getDb()).get(id)
+export function getMemory(id: string, userId: string) {
+  return createMemoryService(getDb()).get(id, userId)
 }
 
-export function updateMemory(id: string, data: Parameters<ReturnType<typeof createMemoryService>["update"]>[1]) {
-  return createMemoryService(getDb()).update(id, data)
+export function updateMemory(id: string, userId: string, data: Parameters<ReturnType<typeof createMemoryService>["update"]>[2]) {
+  return createMemoryService(getDb()).update(id, userId, data)
 }
 
-export function deleteMemory(id: string) {
-  return createMemoryService(getDb()).delete(id)
+export function deleteMemory(id: string, userId: string) {
+  return createMemoryService(getDb()).delete(id, userId)
 }
 
-export function memoryExistsByContent(content: string) {
-  return createMemoryService(getDb()).existsByContent(content)
+export function memoryExistsByContent(content: string, userId: string) {
+  return createMemoryService(getDb()).existsByContent(content, userId)
 }
 
-export function getFormattedMemories(maxChars?: number) {
-  return createMemoryService(getDb()).getFormattedForInjection(maxChars)
+export function getFormattedMemories(userId: string, maxChars?: number) {
+  return createMemoryService(getDb()).getFormattedForInjection(userId, maxChars)
 }

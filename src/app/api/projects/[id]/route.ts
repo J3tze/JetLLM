@@ -16,7 +16,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -47,7 +47,7 @@ export async function PATCH(
     }
 
     const { id } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -56,8 +56,8 @@ export async function PATCH(
     const body = await request.json()
     const { name, icon, systemPrompt, isPinned } = body
 
-    updateProject(id, { name, icon, systemPrompt, isPinned })
-    const updated = getProject(id)
+    updateProject(id, user.id, { name, icon, systemPrompt, isPinned })
+    const updated = getProject(id, user.id)
     return NextResponse.json(updated)
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -79,13 +79,13 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
 
-    deleteProject(id)
+    deleteProject(id, user.id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Failed to delete project:", error)

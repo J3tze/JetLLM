@@ -14,7 +14,7 @@ export async function GET(
   }
 
   const { id } = await params
-  const conversation = getConversation(id)
+  const conversation = getConversation(id, user.id)
 
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
@@ -33,7 +33,7 @@ export async function PATCH(
   }
 
   const { id } = await params
-  const conversation = getConversation(id)
+  const conversation = getConversation(id, user.id)
 
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
@@ -42,8 +42,8 @@ export async function PATCH(
   const body = await request.json()
   const { title, model, provider, systemPrompt, isPinned } = body
 
-  updateConversation(id, { title, model, provider, systemPrompt, isPinned })
-  const updated = getConversation(id)
+  updateConversation(id, user.id, { title, model, provider, systemPrompt, isPinned })
+  const updated = getConversation(id, user.id)
   return NextResponse.json(updated)
 }
 
@@ -57,12 +57,12 @@ export async function DELETE(
   }
 
   const { id } = await params
-  const conversation = getConversation(id)
+  const conversation = getConversation(id, user.id)
 
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
   }
 
-  deleteConversation(id)
+  deleteConversation(id, user.id)
   return NextResponse.json({ success: true })
 }

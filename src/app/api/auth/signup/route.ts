@@ -2,7 +2,9 @@ import { NextResponse } from "next/server"
 import {
   createUser,
   createSession,
+  getUserCount,
   getUserByEmail,
+  publicSignupsEnabled,
   SESSION_COOKIE_NAME,
   validateDisplayNameInput,
   validateEmailInput,
@@ -43,6 +45,13 @@ export async function POST(request: Request) {
 
     if (getUserByEmail(email)) {
       return NextResponse.json({ error: "Email is already in use" }, { status: 409 })
+    }
+
+    if (!publicSignupsEnabled() && getUserCount() > 0) {
+      return NextResponse.json(
+        { error: "Signups are disabled after the first account has been created." },
+        { status: 403 }
+      )
     }
 
     const user = createUser({ email, displayName, password })

@@ -16,7 +16,7 @@ export async function DELETE(
     }
 
     const { id, docId } = await params
-    const project = getProject(id)
+    const project = getProject(id, user.id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })

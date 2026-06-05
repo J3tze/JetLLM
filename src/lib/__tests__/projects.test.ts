@@ -5,6 +5,26 @@ import * as schema from "../db/schema"
 import { createProjectsService } from "../projects"
 import { createConversationsService } from "../conversations"
 
+const USER_ID = "user-1"
+const OTHER_USER_ID = "user-2"
+
+type RawProjectsService = ReturnType<typeof createProjectsService>
+type RawConversationsService = ReturnType<typeof createConversationsService>
+type OwnedProjectsService = {
+  create(data: Omit<Parameters<RawProjectsService["create"]>[0], "userId">): ReturnType<RawProjectsService["create"]>
+  list(): ReturnType<RawProjectsService["list"]>
+  get(id: string): ReturnType<RawProjectsService["get"]>
+  update(id: string, data: Parameters<RawProjectsService["update"]>[2]): ReturnType<RawProjectsService["update"]>
+  delete(id: string): ReturnType<RawProjectsService["delete"]>
+  getConversations(projectId: string): ReturnType<RawProjectsService["getConversations"]>
+  getStandaloneConversations(): ReturnType<RawProjectsService["getStandaloneConversations"]>
+}
+type OwnedConversationsService = {
+  create(data: Omit<Parameters<RawConversationsService["create"]>[0], "userId">): ReturnType<RawConversationsService["create"]>
+  get(id: string): ReturnType<RawConversationsService["get"]>
+  update(id: string, data: Parameters<RawConversationsService["update"]>[2]): ReturnType<RawConversationsService["update"]>
+}
+
 function createTestDb() {
   const sqlite = new Database(":memory:")
   sqlite.pragma("journal_mode = WAL")
@@ -12,8 +32,18 @@ function createTestDb() {
   const db = drizzle({ client: sqlite, schema })
 
   sqlite.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE projects (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       icon TEXT,
       system_prompt TEXT,
@@ -24,6 +54,7 @@ function createTestDb() {
 
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT 'New Chat',
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
@@ -58,21 +89,45 @@ function createTestDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    INSERT INTO users (id, email, display_name, password_hash, created_at, updated_at)
+    VALUES
+      ('${USER_ID}', 'user@example.com', 'User', 'hash', unixepoch(), unixepoch()),
+      ('${OTHER_USER_ID}', 'other@example.com', 'Other', 'hash', unixepoch(), unixepoch());
   `)
 
   return { db, sqlite }
 }
 
+function createOwnedConversationService(db: ReturnType<typeof createTestDb>["db"]): OwnedConversationsService {
+  const raw = createConversationsService(db)
+  return {
+    create: (data) => raw.create({ userId: USER_ID, ...data }),
+    get: (id: string) => raw.get(id, USER_ID),
+    update: (id: string, data) => raw.update(id, USER_ID, data),
+  }
+}
+
 describe("Projects Service", () => {
   let db: ReturnType<typeof createTestDb>["db"]
   let sqlite: Database.Database
-  let service: ReturnType<typeof createProjectsService>
+  let service: OwnedProjectsService
+  let rawService: ReturnType<typeof createProjectsService>
 
   beforeEach(() => {
     const result = createTestDb()
     db = result.db
     sqlite = result.sqlite
-    service = createProjectsService(db)
+    rawService = createProjectsService(db)
+    service = {
+      create: (data) => rawService.create({ userId: USER_ID, ...data }),
+      list: () => rawService.list(USER_ID),
+      get: (id: string) => rawService.get(id, USER_ID),
+      update: (id: string, data) => rawService.update(id, USER_ID, data),
+      delete: (id: string) => rawService.delete(id, USER_ID),
+      getConversations: (projectId: string) => rawService.getConversations(projectId, USER_ID),
+      getStandaloneConversations: () => rawService.getStandaloneConversations(USER_ID),
+    }
   })
 
   afterEach(() => {
@@ -118,6 +173,15 @@ describe("Projects Service", () => {
       const list = service.list()
       expect(list).toEqual([])
     })
+
+    it("does not return projects owned by another user", () => {
+      service.create({ name: "Mine" })
+      rawService.create({ userId: OTHER_USER_ID, name: "Other" })
+
+      const list = service.list()
+      expect(list).toHaveLength(1)
+      expect(list[0].name).toBe("Mine")
+    })
   })
 
   describe("get", () => {
@@ -133,6 +197,11 @@ describe("Projects Service", () => {
     it("returns undefined for a missing id", () => {
       const found = service.get("nonexistent-id")
       expect(found).toBeUndefined()
+    })
+
+    it("returns undefined for another user's project", () => {
+      const other = rawService.create({ userId: OTHER_USER_ID, name: "Other" })
+      expect(service.get(other.id)).toBeUndefined()
     })
   })
 
@@ -215,7 +284,7 @@ describe("Projects Service", () => {
       const project = service.create({ name: "With Convos" })
 
       // Create a conversation linked to this project
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
       const conv = convService.create({
         model: "gpt-4o",
         provider: "openai",
@@ -237,7 +306,7 @@ describe("Projects Service", () => {
   describe("getConversations", () => {
     it("returns conversations for a specific project", () => {
       const project = service.create({ name: "My Project" })
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
 
       convService.create({ model: "gpt-4o", provider: "openai", title: "Project Chat", projectId: project.id })
       convService.create({ model: "gpt-4o", provider: "openai", title: "Standalone Chat" })
@@ -255,7 +324,7 @@ describe("Projects Service", () => {
 
     it("returns conversations ordered by updatedAt desc", () => {
       const project = service.create({ name: "My Project" })
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
 
       const conv1 = convService.create({ model: "gpt-4o", provider: "openai", title: "First", projectId: project.id })
       convService.create({ model: "gpt-4o", provider: "openai", title: "Second", projectId: project.id })
@@ -272,7 +341,7 @@ describe("Projects Service", () => {
   describe("getStandaloneConversations", () => {
     it("returns only conversations without a projectId", () => {
       const project = service.create({ name: "My Project" })
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
 
       convService.create({ model: "gpt-4o", provider: "openai", title: "Project Chat", projectId: project.id })
       convService.create({ model: "gpt-4o", provider: "openai", title: "Standalone Chat" })
@@ -284,7 +353,7 @@ describe("Projects Service", () => {
 
     it("returns empty array when all conversations have projects", () => {
       const project = service.create({ name: "My Project" })
-      const convService = createConversationsService(db)
+      const convService = createOwnedConversationService(db)
 
       convService.create({ model: "gpt-4o", provider: "openai", projectId: project.id })
 

@@ -176,12 +176,28 @@ describe("POST /api/chat", () => {
 
     await POST(req)
 
-    expect(mockGetConversation).toHaveBeenCalledWith("conv-123")
+    expect(mockGetConversation).toHaveBeenCalledWith("conv-123", "user-1")
     expect(mockStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
         system: expect.stringContaining("You are a pirate assistant. Speak like a pirate."),
       })
     )
+  })
+
+  it("returns 404 when the requested conversation is not owned by the user", async () => {
+    const { POST } = await import("../route")
+    mockGetConversation.mockReturnValue(undefined)
+
+    const req = createRequest({
+      messages: [{ role: "user", content: "Hello" }],
+      provider: "openai",
+      model: "gpt-4o",
+      conversationId: "conv-123",
+    })
+
+    const response = await POST(req)
+    expect(response.status).toBe(404)
+    expect(mockStreamText).not.toHaveBeenCalled()
   })
 
   it("uses default system prompt when no conversationId is provided", async () => {
@@ -448,6 +464,7 @@ describe("POST /api/chat", () => {
 
   it("deletes the latest assistant message on regenerate requests", async () => {
     const { POST } = await import("../route")
+    mockGetConversation.mockReturnValue({ id: "conv-123" })
 
     const req = createRequest({
       messages: [{ role: "user", content: "Hello" }],
@@ -459,7 +476,7 @@ describe("POST /api/chat", () => {
 
     await POST(req)
 
-    expect(mockDeleteLatestAssistantMessage).toHaveBeenCalledWith("conv-123")
+    expect(mockDeleteLatestAssistantMessage).toHaveBeenCalledWith("conv-123", "user-1")
   })
 
   it("returns 400 when provider API key is missing", async () => {
@@ -482,6 +499,7 @@ describe("POST /api/chat", () => {
 
   it("persists tool outputs into assistant metadata on finish", async () => {
     const { POST } = await import("../route")
+    mockGetConversation.mockReturnValue({ id: "conv-123" })
 
     const req = createRequest({
       messages: [{ role: "user", content: "Find recent Crimson Desert updates" }],
@@ -515,6 +533,7 @@ describe("POST /api/chat", () => {
 
     expect(mockAddMessage).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         conversationId: "conv-123",
         role: "assistant",
         content: "Here are the latest updates.",
@@ -537,6 +556,6 @@ describe("POST /api/chat", () => {
         text: "Here are the latest updates.",
       }),
     ])
-    expect(mockExtractMemories).toHaveBeenCalledWith("conv-123")
+    expect(mockExtractMemories).toHaveBeenCalledWith("conv-123", "user-1")
   })
 })

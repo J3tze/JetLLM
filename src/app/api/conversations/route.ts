@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { listConversations, createConversation } from "@/lib/conversations"
-import { getProjectConversations, getStandaloneConversations } from "@/lib/projects"
+import { getProject, getProjectConversations, getStandaloneConversations } from "@/lib/projects"
 import { getCurrentUserFromRequest } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
@@ -17,11 +17,11 @@ export async function GET(request: Request) {
 
     let conversations
     if (projectId === "standalone") {
-      conversations = getStandaloneConversations()
+      conversations = getStandaloneConversations(user.id)
     } else if (projectId) {
-      conversations = getProjectConversations(projectId)
+      conversations = getProjectConversations(projectId, user.id)
     } else {
-      conversations = listConversations()
+      conversations = listConversations(user.id)
     }
 
     return NextResponse.json(conversations)
@@ -48,7 +48,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const conversation = createConversation({ model, provider, title, systemPrompt, projectId })
+    if (projectId && !getProject(projectId, user.id)) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
+    const conversation = createConversation({ userId: user.id, model, provider, title, systemPrompt, projectId })
     return NextResponse.json(conversation, { status: 201 })
   } catch (error) {
     if (error instanceof SyntaxError) {

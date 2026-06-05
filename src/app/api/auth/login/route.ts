@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import {
   createSession,
+  isPrimaryUser,
+  publicSignupsEnabled,
   SESSION_COOKIE_NAME,
   validateCredentials,
   validateEmailInput,
@@ -37,6 +39,13 @@ export async function POST(request: Request) {
     const user = validateCredentials(email, password)
     if (!user) {
       return NextResponse.json({ error: "Invalid email or password" }, { status: 401 })
+    }
+
+    if (!publicSignupsEnabled() && !isPrimaryUser(user.id)) {
+      return NextResponse.json(
+        { error: "This JetLLM instance is locked to the primary account." },
+        { status: 403 }
+      )
     }
 
     const session = createSession(user.id)

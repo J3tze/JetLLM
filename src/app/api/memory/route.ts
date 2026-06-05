@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const memories = listMemories()
+  const memories = listMemories(user.id)
   return NextResponse.json(memories)
 }
 
@@ -35,6 +35,6 @@ export async function POST(request: Request) {
     )
   }
 
-  const memory = createMemory({ type, content })
+  const memory = createMemory({ userId: user.id, type, content })
   return NextResponse.json(memory, { status: 201 })
 }

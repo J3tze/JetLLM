@@ -14,16 +14,12 @@ export async function GET(
   }
 
   const { id } = await params
-  const messages = getMessages(id)
-  if (messages.length > 0) {
-    return NextResponse.json(messages)
-  }
-
-  const conversation = getConversation(id)
+  const conversation = getConversation(id, user.id)
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
   }
 
+  const messages = getMessages(id, user.id)
   return NextResponse.json(messages)
 }
 
@@ -37,7 +33,7 @@ export async function POST(
   }
 
   const { id } = await params
-  const conversation = getConversation(id)
+  const conversation = getConversation(id, user.id)
 
   if (!conversation) {
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
@@ -75,6 +71,7 @@ export async function POST(
   const toolCalls = typeof body.toolCalls === "string" ? body.toolCalls : undefined
 
   const message = addMessage({
+    userId: user.id,
     conversationId: id,
     role: body.role as "user" | "assistant" | "system" | "tool",
     content: body.content,

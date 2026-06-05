@@ -7,11 +7,12 @@ type ModelConfig = { provider: string; model: string }
 
 export async function autoTitleConversation(
   conversationId: string,
+  userId: string,
   userMessage: string,
   assistantMessage: string
 ): Promise<void> {
   try {
-    const conversation = getConversation(conversationId)
+    const conversation = getConversation(conversationId, userId)
     if (!conversation) return
 
     // Only auto-title if title is the truncated user message (default from handleSend)
@@ -33,7 +34,7 @@ export async function autoTitleConversation(
 
     const title = text.trim().replace(/^["']|["']$/g, "").slice(0, 80)
     if (title) {
-      updateConversation(conversationId, { title })
+      updateConversation(conversationId, userId, { title })
     }
   } catch (error) {
     console.error("[auto-title] Failed:", error)

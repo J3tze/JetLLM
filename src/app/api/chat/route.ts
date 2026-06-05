@@ -420,7 +420,7 @@ export async function POST(req: Request) {
     // Regenerate requests replace the most recent assistant reply.
     // Remove it first so history stays linear in the DB.
     if (trigger === "regenerate-message" && conversationId) {
-      deleteLatestAssistantMessage(conversationId)
+      deleteLatestAssistantMessage(conversationId, user.id)
     }
 
     if (!Array.isArray(messages)) {
@@ -435,7 +435,14 @@ export async function POST(req: Request) {
       return attachmentValidationError
     }
 
-    const conversation = conversationId ? getConversation(conversationId) : undefined
+    const conversation = conversationId ? getConversation(conversationId, user.id) : undefined
+    if (conversationId && !conversation) {
+      return new Response(JSON.stringify({ error: "Conversation not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     const userMessages = messages.filter(m => m.role === "user")
     const lastUserMessage = userMessages[userMessages.length - 1]
     const lastUserText = lastUserMessage ? getMessageText(lastUserMessage) : ""
@@ -461,7 +468,7 @@ export async function POST(req: Request) {
     // Inject memories into system prompt
     const memoryEnabled = chatConfig.memoryEnabled
     if (memoryEnabled !== false) {
-      const memoryContext = getFormattedMemories()
+      const memoryContext = getFormattedMemories(user.id)
       if (memoryContext) {
         systemPrompt = systemPrompt + "\n\n" + memoryContext
       }
@@ -469,7 +476,7 @@ export async function POST(req: Request) {
 
     // Inject project context and RAG document search
     if (conversation?.projectId) {
-      const project = getProject(conversation.projectId)
+      const project = getProject(conversation.projectId, user.id)
       // Inject project system prompt
       if (project?.systemPrompt) {
         systemPrompt = systemPrompt + "\n\n" + project.systemPrompt
@@ -572,18 +579,19 @@ export async function POST(req: Request) {
           const persistedParts = buildAssistantParts({ text, toolResults })
 
           addMessage({
+            userId: user.id,
             conversationId,
             role: "assistant",
             content: text,
             metadata: JSON.stringify({ parts: persistedParts }),
           })
           // Fire-and-forget memory extraction
-          extractMemories(conversationId).catch((err) => {
+          extractMemories(conversationId, user.id).catch((err) => {
             console.error("[memory] Background extraction error:", err)
           })
           // Auto-title on first assistant response
           if (isFirstAssistantTurn && text) {
-            autoTitleConversation(conversationId, firstUserText, text).catch((err) => {
+            autoTitleConversation(conversationId, user.id, firstUserText, text).catch((err) => {
               console.error("[auto-title] Background error:", err)
             })
           }

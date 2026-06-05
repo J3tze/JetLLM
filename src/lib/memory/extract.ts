@@ -23,7 +23,7 @@ type ExtractedMemory = {
  * Run memory extraction for a conversation.
  * Called as fire-and-forget from the chat API's onFinish callback.
  */
-export async function extractMemories(conversationId: string): Promise<void> {
+export async function extractMemories(conversationId: string, userId: string): Promise<void> {
   try {
     // Check if memory is enabled
     const enabled = getSetting<boolean>("memory:enabled")
@@ -34,7 +34,7 @@ export async function extractMemories(conversationId: string): Promise<void> {
     if (!modelConfig?.provider || !modelConfig?.model) return
 
     // Get conversation messages (last 10 for context)
-    const messages = getMessages(conversationId)
+    const messages = getMessages(conversationId, userId)
     if (messages.length < 2) return
 
     const recentMessages = messages.slice(-10)
@@ -43,7 +43,7 @@ export async function extractMemories(conversationId: string): Promise<void> {
       .join("\n\n")
 
     // Get existing memories for dedup
-    const existingMemories = listMemories().map(m => m.content)
+    const existingMemories = listMemories(userId).map(m => m.content)
 
     // Build prompt and call extraction model
     const prompt = buildExtractionPrompt(existingMemories, formattedMessages)
@@ -58,8 +58,9 @@ export async function extractMemories(conversationId: string): Promise<void> {
     // Parse and store new memories
     const parsed = parseExtractionResponse(text)
     for (const memory of parsed) {
-      if (!memoryExistsByContent(memory.content)) {
+      if (!memoryExistsByContent(memory.content, userId)) {
         createMemory({
+          userId,
           type: memory.type,
           content: memory.content,
           sourceConversationId: conversationId,

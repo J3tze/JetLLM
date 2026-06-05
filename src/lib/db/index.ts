@@ -25,10 +25,68 @@ function loadSqliteVecExtension(sqlite: InstanceType<typeof Database>) {
   }
 }
 
+function getFirstUserId(sqlite: InstanceType<typeof Database>): string | null {
+  const row = sqlite
+    .prepare("SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT 1")
+    .get() as { id?: string } | undefined
+  return row?.id ?? null
+}
+
+function addColumnIfMissing(sqlite: InstanceType<typeof Database>, table: string, column: string, ddl: string) {
+  const columns = sqlite
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as Array<{ name: string }>
+
+  if (!columns.some(existingColumn => existingColumn.name === column)) {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+  }
+}
+
+function assignLegacyRowsToFirstUser(sqlite: InstanceType<typeof Database>) {
+  const firstUserId = getFirstUserId(sqlite)
+  if (!firstUserId) return
+
+  sqlite.prepare("UPDATE projects SET user_id = ? WHERE user_id IS NULL").run(firstUserId)
+  sqlite.prepare(`
+    UPDATE conversations
+    SET user_id = COALESCE(
+      (SELECT projects.user_id FROM projects WHERE projects.id = conversations.project_id),
+      ?
+    )
+    WHERE user_id IS NULL
+  `).run(firstUserId)
+  sqlite.prepare(`
+    UPDATE memories
+    SET user_id = COALESCE(
+      (SELECT conversations.user_id FROM conversations WHERE conversations.id = memories.source_conversation_id),
+      ?
+    )
+    WHERE user_id IS NULL
+  `).run(firstUserId)
+}
+
 function ensureTables(sqlite: InstanceType<typeof Database>) {
   sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       icon TEXT,
       system_prompt TEXT,
@@ -39,6 +97,7 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
 
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT 'New Chat',
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
@@ -61,6 +120,7 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
 
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
       type TEXT NOT NULL CHECK (type IN ('fact', 'preference', 'summary')),
       content TEXT NOT NULL,
       source_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
@@ -80,23 +140,6 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      display_name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      token_hash TEXT NOT NULL UNIQUE,
-      expires_at INTEGER NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
     CREATE TABLE IF NOT EXISTS document_chunks (
@@ -127,6 +170,11 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
     // Column already exists — ignore
   }
 
+  addColumnIfMissing(sqlite, "projects", "user_id", "user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+  addColumnIfMissing(sqlite, "conversations", "user_id", "user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+  addColumnIfMissing(sqlite, "memories", "user_id", "user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+  assignLegacyRowsToFirstUser(sqlite)
+
   // Migration: add is_pinned column
   try {
     sqlite.exec(`ALTER TABLE projects ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`)
@@ -144,11 +192,20 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS idx_projects_pinned_updated
     ON projects(is_pinned DESC, updated_at DESC);
 
+    CREATE INDEX IF NOT EXISTS idx_projects_user_pinned_updated
+    ON projects(user_id, is_pinned DESC, updated_at DESC);
+
     CREATE INDEX IF NOT EXISTS idx_conversations_pinned_updated
     ON conversations(is_pinned DESC, updated_at DESC);
 
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_pinned_updated
+    ON conversations(user_id, is_pinned DESC, updated_at DESC);
+
     CREATE INDEX IF NOT EXISTS idx_conversations_project_pinned_updated
     ON conversations(project_id, is_pinned DESC, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_project_pinned_updated
+    ON conversations(user_id, project_id, is_pinned DESC, updated_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
     ON messages(conversation_id, created_at ASC);
@@ -161,6 +218,9 @@ function ensureTables(sqlite: InstanceType<typeof Database>) {
 
     CREATE INDEX IF NOT EXISTS idx_memories_created
     ON memories(created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_memories_user_created
+    ON memories(user_id, created_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_documents_project_created
     ON documents(project_id, created_at DESC);
