@@ -46,8 +46,9 @@ jobs:
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
-          printf "%s\n" "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          printf "%s\n" "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
 
           if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
             printf "%s\n" "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
@@ -69,7 +70,12 @@ jobs:
           PORT="${VPS_PORT:-22}"
           APP_PATH="${VPS_APP_PATH:-/opt/jetllm}"
 
-          ssh -p "$PORT" "$VPS_USER@$VPS_HOST" "bash -se" <<EOF
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -p "$PORT" \
+            "$VPS_USER@$VPS_HOST" "bash -se" <<EOF
           set -euo pipefail
           cd "$APP_PATH"
           docker compose -f docker-compose.deploy.yml --env-file .env.deploy pull

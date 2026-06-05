@@ -255,6 +255,8 @@ Path alias: `@` maps to `src/`.
 - Upgraded the GitHub-facing repository presentation in `README.md` with centered branding, shields, preview screenshots, a highlights table, and cleaner deploy/setup sections, and added local artifact patterns to `.gitignore` so future logs/captures/SQLite files do not clutter public repo work.
 - Removed README screenshot references to old/error-state UI captures so the now-public GitHub repository presents clean documentation without misleading preview images.
 - Fixed cross-account data exposure across `src/lib/conversations.ts`, `src/lib/projects.ts`, `src/lib/memory.ts`, their API routes, and SQLite schema/bootstrap by adding `user_id` ownership, backfilling legacy rows to the first account, scoping chat/project/memory reads and writes by `user.id`, and locking default signup/login behavior to the primary account unless `ALLOW_PUBLIC_SIGNUPS=true`, so newly created accounts can no longer read existing chats.
+- Deployed security fix commit `490fb4e` to the VPS with the manual archive fallback after GitLab pipeline `#2579229046` stayed pending, then verified the container was running, `/login` returned `200`, unauthenticated `/api/conversations` returned `401`, signup returned `403` after the first account, and SQLite had `user_id` ownership with zero null owner rows across conversations, projects, and memories.
+- Configured GitHub Actions deploy secrets/variables for `J3tze/JetLLM` and updated `.github/workflows/vps-auto-deploy.yml` to normalize and validate the SSH key file, then force it with `IdentitiesOnly=yes`, so the GitHub VPS deploy pipeline can authenticate to the server instead of relying on default SSH key discovery.
 
 ## Local Service Inventory
 
