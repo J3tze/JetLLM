@@ -237,6 +237,23 @@ Path alias: `@` maps to `src/`.
 - Switched the production build script in `package.json` to `next build --webpack` after the VPS Docker no-cache rebuild hit a Turbopack internal panic and the running standalone image lacked `/app/.next/server/app/icon.svg.body`; local webpack build now completes and emits the `/icon.svg` route, preserving the new browser-tab jet icon in standalone output.
 - Deployed commit `84c2812` to the VPS with the manual archive fallback after normalizing `docker-entrypoint.sh` line endings on `/opt/jetllm`; verified the replacement container is up, `/login`, `/icon.svg`, and `/favicon.ico` return `200 OK`, and the running standalone image contains both icon route body files.
 
+## Recent Updates (2026-05-08)
+
+- Replaced the empty pending assistant placeholder in `src/components/chat/message-list.tsx` with a visible activity indicator that also handles AI SDK empty assistant messages, and added regression coverage in `src/components/chat/__tests__/message-list.markdown.test.tsx` so `Contacting provider...` appears inside the bubble instead of leaving a blank reply surface.
+- Restyled chat bubbles in `src/components/chat/chat-message.tsx` by constraining assistant bubble width, reducing slab-like geometry, softening corner radii, and dialing back shadows so messages look like rounded chat bubbles instead of square blocks.
+- Restored visibly distinct chat bubble style modes in `src/components/chat/chat-message.tsx`: `Flat` now keeps assistant replies surface-free, `Minimal` uses compact cards, and `Full Bubbles` uses larger glossy rounded bubbles so the settings toggle has an obvious effect again.
+- Fixed chat bubble-style propagation in `src/components/chat/chat-panel.tsx`, `src/hooks/use-chat-theme.ts`, and `src/components/theme-initializer.tsx` by loading `ui:chatTheme` during chat bootstrap and dispatching/listening for an explicit browser event, so the chat view reliably receives bubble-style changes instead of relying only on a root DOM attribute.
+- Hardened bubble-style persistence by adding the small `ui:chatBubbleStyle` setting across `src/hooks/use-chat-theme.ts`, `src/components/theme-initializer.tsx`, `src/components/chat/chat-panel.tsx`, and `src/app/api/settings/route.ts`, and added inline bubble radii plus `data-bubble-style` markers in `src/components/chat/chat-message.tsx` so style changes are saved independently of the large chat theme blob and are easy to verify in the DOM.
+
+## Recent Updates (2026-05-21)
+
+- Configured VS Code `zokugun.sync-settings` in `C:\Users\Jetze\AppData\Roaming\Code\User\globalStorage\zokugun.sync-settings\settings.yml` to use the private GitHub repo `J3tze/Sync-Settings-VSCode` over HTTPS on branch `main`; SSH was tested but rejected by GitHub, while HTTPS access worked with local Git credentials.
+
+## Recent Updates (2026-06-05)
+
+- Replaced the default create-next-app text in `README.md` with GitHub-ready JetLLM documentation covering features, local setup, configuration, Docker/deploy links, project structure, security notes, and troubleshooting so the repository has a useful public entry point before bugfix and optimization work.
+- Upgraded the GitHub-facing repository presentation in `README.md` with centered branding, shields, preview screenshots, a highlights table, and cleaner deploy/setup sections, and added local artifact patterns to `.gitignore` so future logs/captures/SQLite files do not clutter public repo work.
+
 ## Local Service Inventory
 
 - JetLLM local compose in this repo binds host port `3000` to container port `3000` via `docker-compose.yml`.
