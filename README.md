@@ -11,10 +11,6 @@
   </p>
 </div>
 
-<p align="center">
-  <img src="chat-main.png" alt="JetLLM chat interface preview" width="900">
-</p>
-
 JetLLM is a private-first web UI for people who want their LLM workflow under their own control. Bring your own provider keys, run it locally or on a VPS, and keep conversations, memories, project documents, settings, and provider routing in your own SQLite-backed deployment.
 
 ## Highlights
@@ -123,13 +119,6 @@ Supported deployment guides:
 - [GitLab CI VPS deploy](docs/deploy-vps-gitlab.md)
 
 The production image uses Next standalone output and keeps SQLite at `/app/data/jetllm.db`. If you run JetLLM behind a reverse proxy, keep websocket and streaming-friendly proxy settings enabled.
-
-## Screenshots
-
-<p>
-  <img src="project-home-desktop.png" alt="JetLLM project view" width="49%">
-  <img src="settings-page.png" alt="JetLLM settings view" width="49%">
-</p>
 
 ## Project Structure
 
