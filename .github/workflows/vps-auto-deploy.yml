@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: vps-auto-deploy
@@ -65,10 +66,13 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_APP_PATH: ${{ vars.VPS_APP_PATH }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
           APP_PATH="${VPS_APP_PATH:-/opt/jetllm}"
+          [ -n "${GHCR_TOKEN:-}" ] || { echo "Missing GitHub token for GHCR pull" >&2; exit 1; }
 
           ssh \
             -i ~/.ssh/id_ed25519 \
@@ -78,6 +82,10 @@ jobs:
             "$VPS_USER@$VPS_HOST" "bash -se" <<EOF
           set -euo pipefail
           cd "$APP_PATH"
+          DOCKER_CONFIG="\$(mktemp -d)"
+          trap 'rm -rf "\$DOCKER_CONFIG"' EXIT
+          export DOCKER_CONFIG
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           docker compose -f docker-compose.deploy.yml --env-file .env.deploy pull
           docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
           docker image prune -f
