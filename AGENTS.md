@@ -258,6 +258,7 @@ Path alias: `@` maps to `src/`.
 - Deployed security fix commit `490fb4e` to the VPS with the manual archive fallback after GitLab pipeline `#2579229046` stayed pending, then verified the container was running, `/login` returned `200`, unauthenticated `/api/conversations` returned `401`, signup returned `403` after the first account, and SQLite had `user_id` ownership with zero null owner rows across conversations, projects, and memories.
 - Configured GitHub Actions deploy secrets/variables for `J3tze/JetLLM` and updated `.github/workflows/vps-auto-deploy.yml` to normalize and validate the SSH key file, then force it with `IdentitiesOnly=yes`, so the GitHub VPS deploy pipeline can authenticate to the server instead of relying on default SSH key discovery.
 - Added a dedicated unencrypted GitHub Actions deploy key on the VPS and updated `.github/workflows/vps-auto-deploy.yml` with `packages: read` plus a temporary GHCR login before `docker compose pull`, so the restored GitHub deploy pipeline can authenticate both SSH and the private container registry without persistent registry credentials on the server.
+- Verified the restored GitHub pipeline on `master`: `Publish Docker Image` run `27014124382` succeeded, chained `Auto Deploy VPS` run `27014262686` succeeded at commit `f335133`, and VPS smoke checks showed `jetllm-jetllm-1` running with `/login` returning `200` and unauthenticated `/api/conversations` returning `401`.
 
 ## Local Service Inventory
 
